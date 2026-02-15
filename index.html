@@ -6,7 +6,61 @@
     <title>656tmp_p1</title>
   </head>
   <body>
-    <canvas id="glcanvas" width="640" height="480"></canvas>
+    <div class="page">
+      <main class="stage">
+        <section class="stage__frame">
+          <div class="stage__orbit orbit--one"></div>
+          <div class="stage__orbit orbit--two"></div>
+          <canvas id="glcanvas" width="640" height="640"></canvas>
+        </section>
+
+        <aside class="panel">
+          <div class="panel__header">
+            <h2>Controls</h2>
+            <span class="panel__badge">Live</span>
+          </div>
+
+          <div class="control-group">
+            <label class="control toggle">
+              <input type="checkbox" checked />
+              <span class="toggle__track"></span>
+              <span class="control__label">Soft shadows</span>
+            </label>
+            <label class="control toggle">
+              <input type="checkbox" />
+              <span class="toggle__track"></span>
+              <span class="control__label">Rim light</span>
+            </label>
+            <label class="control toggle">
+              <input type="checkbox" checked />
+              <span class="toggle__track"></span>
+              <span class="control__label">Normal map</span>
+            </label>
+          </div>
+
+          <div class="control-group">
+            <label class="control">
+              <span class="control__label">Specular intensity</span>
+              <input type="range" min="0" max="100" value="70" />
+            </label>
+            <label class="control">
+              <span class="control__label">Light height</span>
+              <input type="range" min="0" max="100" value="42" />
+            </label>
+            <label class="control">
+              <span class="control__label">Surface roughness</span>
+              <input type="range" min="0" max="100" value="28" />
+            </label>
+          </div>
+
+          <div class="panel__footer">
+            <button class="button button--primary">Reset scene</button>
+            <button class="button button--ghost">Snapshot</button>
+          </div>
+        </aside>
+      </main>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
