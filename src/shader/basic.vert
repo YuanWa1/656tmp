@@ -12,6 +12,5 @@ void main() {
   // gl_Position is a special variable a vertex shader
   // is responsible for setting
   uv = a_position.xy * 0.5 + 0.5;
-  uv.y = 1.0 - uv.y;
   gl_Position = a_position;
 }

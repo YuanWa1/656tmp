@@ -89,13 +89,11 @@
     
       // make unit 0 the active texture uint
       // (ie, the unit all other texture commands will affect
-      if(type === "base"){
-        var count = 0;
-      }else if(type === "normal"){
-        var count = 1;
-      }
+      const count = (type === "base") ? 0 :
+                  (type === "normal") ? 1 :
+                  (() => { throw new Error("bad type: " + type); })();
       gl.activeTexture(gl.TEXTURE0 + count);
-    
+
       // Bind it to texture unit 0' 2D bind point
       gl.bindTexture(gl.TEXTURE_2D, texture);
 
@@ -173,7 +171,7 @@
     console.log(`Loading image: ${url}`);
     const res = await fetch(url);
     const blob = await res.blob();
-    return await createImageBitmap(blob);
+    return await createImageBitmap(blob,{imageOrientation: 'flipY'});
   }
 
   async function main() {

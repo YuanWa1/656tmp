@@ -22,6 +22,7 @@ void main() {
 
     vec3 albedo = texture(u_base, uv).rgb;
     vec3 nTex   = texture(u_normal, uv).rgb;
+    nTex = pow(nTex, vec3(2.2));
 
     //Initial variable
     Id = vec3(1);
@@ -34,6 +35,7 @@ void main() {
     Ka = albedo;
 
     vec3 N = normalize(nTex * 2.0 - 1.0);
+    N.y = -N.y;  // Flip Y component because UV was flipped
 
     //Light
     vec2 mouse_position = vec2(u_mouse.x, u_mouse.y) / u_resolution.xy;
