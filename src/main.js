@@ -187,9 +187,11 @@
     // look up where the vertex data needs to go.
 
     const { vao: vao_quad, vbo: vbo_fullscreen_quad } = createQuad(gl,program);
-
-    const baseBitmap   = await loadBitmap("/pics/base.png");
-    const normalBitmap = await loadBitmap("/pics/normal.png");
+    
+    const basePath = import.meta.env.BASE_URL;
+    
+    const baseBitmap   = await loadBitmap(`${basePath}pics/base.png`);
+    const normalBitmap = await loadBitmap(`${basePath}pics/normal.png`);
 
     const baseTex   = createTexture(gl, baseBitmap, "base");
     const normalTex = createTexture(gl, normalBitmap, "normal");
