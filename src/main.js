@@ -91,7 +91,10 @@
       // (ie, the unit all other texture commands will affect
       const count = (type === "base") ? 0 :
                   (type === "normal") ? 1 :
+                  (type === "ambient") ? 2 :
                   (() => { throw new Error("bad type: " + type); })();
+
+      console.log(`Creating texture for ${type} at unit ${count}`);
       gl.activeTexture(gl.TEXTURE0 + count);
 
       // Bind it to texture unit 0' 2D bind point
@@ -101,9 +104,9 @@
       // and we don't repeat
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      if(type === "base"){
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-      }else if(type === "normal"){
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      if(type === "normal"){
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       }
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -111,9 +114,8 @@
       // Upload the image into the texture.
       var mipLevel = 0;               // the largest mip
 
-      if(type === "base"){
-        var internalFormat = gl.SRGB8_ALPHA8; 
-      }else if(type === "normal"){
+      var internalFormat = gl.SRGB8_ALPHA8; 
+      if(type === "normal"){
         var internalFormat = gl.RGBA8;
       }
       var srcFormat = gl.RGBA;        // format of data we are supplying
@@ -124,9 +126,9 @@
                     srcFormat,
                     srcType,
                     image);
-      if(type === "base"){
-        gl.generateMipmap(gl.TEXTURE_2D);
-      }
+      
+      gl.generateMipmap(gl.TEXTURE_2D);
+
       return texture;
     }
 
@@ -139,6 +141,7 @@
       const resolutionUniformLocation = gl.getUniformLocation(program,"u_resolution");
       const BaseimageLocation = gl.getUniformLocation(program, "u_base");
       const NormalimageLocation = gl.getUniformLocation(program, "u_normal");
+      const AmbientimageLocation = gl.getUniformLocation(program, "u_ambient");
 
 
       // Clear the canvas
@@ -159,6 +162,7 @@
 
       gl.uniform1i(BaseimageLocation, 0); // texture unit 0
       gl.uniform1i(NormalimageLocation, 1); // texture unit 1
+      gl.uniform1i(AmbientimageLocation, 2); // texture unit 2
 
       // Draw the rectangle.
       var primitiveType = gl.TRIANGLES;
@@ -192,9 +196,11 @@
     
     const baseBitmap   = await loadBitmap(`${basePath}pics/base.png`);
     const normalBitmap = await loadBitmap(`${basePath}pics/normal.png`);
+    // const ambientBitmap = await loadBitmap(`${basePath}pics/ambient.png`);
 
     const baseTex   = createTexture(gl, baseBitmap, "base");
     const normalTex = createTexture(gl, normalBitmap, "normal");
+    // const ambientTex = createTexture(gl, ambientBitmap, "ambient");
 
 
     let mouseX = 0;
@@ -204,6 +210,7 @@
       const rect = canvas.getBoundingClientRect();
       mouseX = e.clientX - rect.left;
       mouseY = rect.height - (e.clientY - rect.top) - 1;  // bottom is 0 in WebGL
+      // console.log(`Mouse position: (${mouseX}, ${mouseY})`);
     }
     canvas.addEventListener('mousemove', setMousePosition);
 

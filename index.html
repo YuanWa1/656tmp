@@ -12,7 +12,23 @@
           <canvas id="glcanvas" width="640" height="640"></canvas>
         </section>
 
-        <aside class="panel">
+        <section class="stage__content">
+          <div class="content__demo">
+            <h3>Demo</h3>
+            <video controls>
+              <source src="/public/pics/Demo.mp4" type="video/mp4">
+              Your browser does not support the video tag.
+            </video>
+          </div>
+          <div class="content__description">
+            <h2>Description</h2>
+            <p> This fragment shader implements per-pixel lighting using the Blinn-Phong model on a flat 2D surface in UV space. It samples an albedo texture for base color and a tangent-space normal map for per-pixel surface orientation. </p> 
+            <p> The normal map is stored in RGB in [0,1] and is decoded to a signed normal in [-1,1] with N = normalize(nTex * 2.0 - 1.0). This decoded normal replaces geometric normals and creates a 3D appearance on a flat plane. </p> 
+            <p> Lighting uses a movable light derived from the mouse: L is the direction from (uv,0) to (mouse_position,0.2), while the view direction V is fixed at (0,0,1). Diffuse is max(dot(N,L),0). Specular uses the Blinn-Phong half-vector H = normalize(L+V) with pow(max(dot(N,H),0), shininess). Ambient, diffuse, and specular are summed in linear space, then gamma-encoded for display. </p>
+          </div>
+        </section>
+
+        <!-- <aside class="panel">
           <div class="panel__header">
             <h2>Controls</h2>
             <span class="panel__badge">Live</span>
@@ -55,7 +71,7 @@
             <button class="button button--primary">Reset scene</button>
             <button class="button button--ghost">Snapshot</button>
           </div>
-        </aside>
+        </aside> -->
       </main>
     </div>
 

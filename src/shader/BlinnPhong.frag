@@ -12,6 +12,7 @@ uniform vec2 u_mouse;
 
 uniform sampler2D u_base;
 uniform sampler2D u_normal;
+uniform sampler2D u_ambient;
 
 // we need to declare an output for the fragment shader
 out vec4 outColor;
@@ -22,25 +23,26 @@ void main() {
 
     vec3 albedo = texture(u_base, uv).rgb;
     vec3 nTex   = texture(u_normal, uv).rgb;
-    nTex = pow(nTex, vec3(2.2));
+    vec3 ambient = texture(u_ambient, uv).rgb;
 
     //Initial variable
     Id = vec3(1);
     Is = Id;
     Ia = 0.05 * Id;
+    // Ia = ambient;
 
 
     Ks = vec3(0.05);
-    Kd = albedo * (1.0 - Ks);
+    Kd = albedo;
     Ka = albedo;
 
     vec3 N = normalize(nTex * 2.0 - 1.0);
-    N.y = -N.y;  // Flip Y component because UV was flipped
+    //N.y = -N.y;
 
     //Light
     vec2 mouse_position = vec2(u_mouse.x, u_mouse.y) / u_resolution.xy;
   
-    vec3 L = normalize(vec3(mouse_position,1.0) - vec3(uv,0.0));
+    vec3 L = normalize(vec3(mouse_position,0.2) - vec3(uv,0.0));
 
     //View
     vec3 V = vec3(0.0,0.0,1.0);
@@ -52,7 +54,7 @@ void main() {
     //spec
     vec3 H = normalize(L + V);
 
-    float spec = pow(max(dot(N,H),0.0),128.0);
+    float spec = pow(max(dot(N,H),0.0),8.0);
 
     //
     vec3 am = Ka * Ia;
@@ -62,5 +64,6 @@ void main() {
     //From rgb to srgb
     vec3 linearColor = am + dif + spc;
     vec3 srgb = pow(clamp(linearColor, 0.0, 1.0), vec3(1.0/2.2));
+
     outColor = vec4(srgb, 1.0);
 }
