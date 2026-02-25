@@ -57,7 +57,7 @@ void main() {
 
   //In
   vec3 I = normalize(first_inter - V); 
-  // I = -V;
+  //I = -V;
 
   float F0 = (n1 - n2)/(n1 + n2) * (n1 - n2)/(n1 + n2);
   float F = F0 + (1.0-F0) * pow( max(1.0 - dot(N,-I), 0.0), 5.0);
@@ -97,33 +97,26 @@ void main() {
   //After second refraction
   vec3 T2 = refract(T,N2,n2/n1);
 
-  if (length(T2) < 0.001) {
-      out_color = vec4(0.0, 0.0, 0.0, 1.0); 
-      return;
+  vec3 bgColor = vec3(0.0);
+  if (length(T2) >= 0.001) {
+      if (abs(T2.z) < 1e-4) { 
+          bgColor = reflectColor;
+      } else {
+          float z_bg = -0.21;
+          float t_bg = (z_bg - second_inter.z) / T2.z;
+          
+          if (t_bg >= 0.0) {
+              vec2 Q = second_inter.xy + t_bg*T2.xy;
+              Q.x /= aspect;
+              Q = Q*0.5+0.5;
+              Q = clamp(Q, 0.0, 1.0);
+          
+              bgColor = pow(texture(u_base, Q).rgb, vec3(2.2));
+              
+              bgColor = bgColor * (1.0 - F_sec);
+          }
+      }
   }
-
-  // This is mathmatical way of calculating the uv
-  // float z_bg = -0.21;
-
-  // float t_bg = (z_bg - second_inter.z) / T2.z;
-
-  // if (t_bg < 0.0) {
-  //       out_color = vec4(0.0, 0.0, 0.0, 1.0);
-  //       return;
-  //   }
-
-  //vec2 Q = second_inter.xy + t_bg*T2.xy;
-
-  float distance_factor = 0.02;
-  vec2 Q = second_inter.xy + T2.xy * distance_factor;
-  Q.x /= aspect;
-  Q = Q*0.5+0.5;
-
-  // Q = clamp(Q, 0.0, 1.0);
-  
-  vec3 bgColor = texture(u_base,Q).rgb;
-
-  bgColor = bgColor*(1.0 -F_sec);
 
   vec3 finalColor = mix(bgColor, reflectColor, F);
 
