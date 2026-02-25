@@ -97,9 +97,9 @@ body {
 
 .stage {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) 320px;
+  grid-template-columns: 1fr 320px;
   gap: 28px;
-  align-items: center;
+  align-items: start;
 }
 
 .stage__frame {
@@ -201,6 +201,7 @@ body {
   display: grid;
   gap: 20px;
   box-shadow: var(--shadow);
+  align-self: start;
 }
 
 .panel__header {
@@ -339,6 +340,34 @@ input[type="range"]::-moz-range-thumb {
 
 .button:hover {
   transform: translateY(-2px);
+}
+
+.texture-previews {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.texture-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.texture-preview h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.texture-preview img {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 34, 51, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: block;
 }
 
 @media (max-width: 960px) {

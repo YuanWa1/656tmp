@@ -3,6 +3,7 @@
 
   import vertexShaderSource from "./shader/basic.vert?raw";
   import BlinnPhongShaderSource from "./shader/BlinnPhong.frag?raw";
+  import FresnelShaderSource from "./shader/Fresnel.frag?raw";
 
   function createShader(gl, type, source) {
     var shader = gl.createShader(type);
@@ -132,7 +133,7 @@
       return texture;
     }
 
-  function render(gl,program,vao,vbo,mouseX,mouseY,time){
+  function render(gl,program,vao,vbo,mouseX,mouseY,time,n1,n2){
       // Tell WebGL how to convert from clip space to pixels
       gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
@@ -140,8 +141,10 @@
       const mouseLocation = gl.getUniformLocation(program, "u_mouse");
       const resolutionUniformLocation = gl.getUniformLocation(program,"u_resolution");
       const BaseimageLocation = gl.getUniformLocation(program, "u_base");
-      const NormalimageLocation = gl.getUniformLocation(program, "u_normal");
-      const AmbientimageLocation = gl.getUniformLocation(program, "u_ambient");
+      const n1Location = gl.getUniformLocation(program, "n1");
+      const n2Location = gl.getUniformLocation(program, "n2");
+      // const NormalimageLocation = gl.getUniformLocation(program, "u_normal");
+      // const AmbientimageLocation = gl.getUniformLocation(program, "u_ambient");
 
 
       // Clear the canvas
@@ -159,10 +162,12 @@
 
       // Pass the mouse position
       gl.uniform2f(mouseLocation, mouseX, mouseY);
+      gl.uniform1f(n1Location, n1);
+      gl.uniform1f(n2Location, n2);
 
       gl.uniform1i(BaseimageLocation, 0); // texture unit 0
-      gl.uniform1i(NormalimageLocation, 1); // texture unit 1
-      gl.uniform1i(AmbientimageLocation, 2); // texture unit 2
+      // gl.uniform1i(NormalimageLocation, 1); // texture unit 1
+      // gl.uniform1i(AmbientimageLocation, 2); // texture unit 2
 
       // Draw the rectangle.
       var primitiveType = gl.TRIANGLES;
@@ -183,10 +188,11 @@
     if (!gl) return;
 
     var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-    var BlinnPhongfragmentShader = createShader(gl, gl.FRAGMENT_SHADER, BlinnPhongShaderSource);
+    // var BlinnPhongfragmentShader = createShader(gl, gl.FRAGMENT_SHADER, BlinnPhongShaderSource);
+    var FresnelfragmentShader = createShader(gl, gl.FRAGMENT_SHADER, FresnelShaderSource);
 
     // Link the two shaders into a program
-    var program = createProgram(gl, vertexShader, BlinnPhongfragmentShader);
+    var program = createProgram(gl, vertexShader, FresnelfragmentShader);
 
     // look up where the vertex data needs to go.
 
@@ -194,17 +200,19 @@
     
     const basePath = import.meta.env.BASE_URL;
     
-    const baseBitmap   = await loadBitmap(`${basePath}pics/base.png`);
-    const normalBitmap = await loadBitmap(`${basePath}pics/normal.png`);
+    const baseBitmap   = await loadBitmap(`${basePath}pics/base_p2.png`);
+    // const normalBitmap = await loadBitmap(`${basePath}pics/normal.png`);
     // const ambientBitmap = await loadBitmap(`${basePath}pics/ambient.png`);
 
     const baseTex   = createTexture(gl, baseBitmap, "base");
-    const normalTex = createTexture(gl, normalBitmap, "normal");
+    // const normalTex = createTexture(gl, normalBitmap, "normal");
     // const ambientTex = createTexture(gl, ambientBitmap, "ambient");
 
 
     let mouseX = 0;
     let mouseY = 0;
+    let n1 = 1.0;
+    let n2 = 1.2;
 
     function setMousePosition(e) {
       const rect = canvas.getBoundingClientRect();
@@ -214,8 +222,77 @@
     }
     canvas.addEventListener('mousemove', setMousePosition);
 
+    // Connect n1 and n2 sliders and inputs
+    const n1Slider = document.getElementById('n1-slider');
+    const n2Slider = document.getElementById('n2-slider');
+    const n1Input = document.getElementById('n1-input');
+    const n2Input = document.getElementById('n2-input');
+
+    function updateN1FromSlider(value) {
+      n1 = value / 10.0;
+      n1Input.value = n1.toFixed(1);
+    }
+
+    function updateN2FromSlider(value) {
+      n2 = value / 10.0;
+      n2Input.value = n2.toFixed(1);
+    }
+
+    function updateN1FromInput(value) {
+      n1 = Math.max(0.1, Math.min(30.0, parseFloat(value)));
+      n1Slider.value = Math.round(n1 * 10);
+      n1Input.value = n1.toFixed(1);
+    }
+
+    function updateN2FromInput(value) {
+      n2 = Math.max(0.1, Math.min(30.0, parseFloat(value)));
+      n2Slider.value = Math.round(n2 * 10);
+      n2Input.value = n2.toFixed(1);
+    }
+
+    function setSliderValues(n1Val, n2Val) {
+      n1Slider.value = Math.round(n1Val * 10);
+      n2Slider.value = Math.round(n2Val * 10);
+      updateN1FromSlider(n1Slider.value);
+      updateN2FromSlider(n2Slider.value);
+    }
+
+    n1Slider.addEventListener('input', (e) => updateN1FromSlider(parseInt(e.target.value)));
+    n2Slider.addEventListener('input', (e) => updateN2FromSlider(parseInt(e.target.value)));
+    n1Input.addEventListener('input', (e) => updateN1FromInput(e.target.value));
+    n2Input.addEventListener('input', (e) => updateN2FromInput(e.target.value));
+
+    // Connect checkboxes for mutual exclusion and parameter presets
+    const allReflectionCheckbox = document.getElementById('all-reflection-checkbox');
+    const regularCheckbox = document.getElementById('regular-checkbox');
+
+    allReflectionCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        regularCheckbox.checked = false;
+        setSliderValues(0.0, 2.0);  // n1=0, n2=2.0
+      } else {
+        // Ensure at least one is checked
+        regularCheckbox.checked = true;
+        setSliderValues(1.0, 1.2);
+      }
+    });
+
+    regularCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        allReflectionCheckbox.checked = false;
+        setSliderValues(1.0, 1.2);  // n1=1.0, n2=1.2
+      } else {
+        // Ensure at least one is checked
+        allReflectionCheckbox.checked = true;
+        setSliderValues(0.0, 2.0);
+      }
+    });
+
+    // Initialize with Regular mode (default)
+    setSliderValues(1.0, 1.2);
+
       function frame(time) {
-        render(gl, program, vao_quad, vbo_fullscreen_quad, mouseX, mouseY, time);
+        render(gl, program, vao_quad, vbo_fullscreen_quad, mouseX, mouseY, time, n1, n2);
 
         requestAnimationFrame(frame);
       }

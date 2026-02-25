@@ -12,6 +12,53 @@
           <canvas id="glcanvas" width="640" height="640"></canvas>
         </section>
 
+        <aside class="panel">
+          <div class="panel__header">
+            <h2>Controls</h2>
+            <span class="panel__badge">Live</span>
+          </div>
+
+          <div class="control-group">
+            <label class="control toggle">
+              <input id="all-reflection-checkbox" type="checkbox" />
+              <span class="toggle__track"></span>
+              <span class="control__label">All Reflection</span>
+            </label>
+            <label class="control toggle">
+              <input id="regular-checkbox" type="checkbox" checked />
+              <span class="toggle__track"></span>
+              <span class="control__label">Regular</span>
+            </label>
+          </div>
+
+          <div class="control-group">
+            <label class="control">
+              <span class="control__label">n1: <input id="n1-input" type="number" min="0.1" max="30.0" step="0.1" value="1.0" style="width: 60px; margin-left: 8px; padding: 4px; border-radius: 4px; border: 1px solid rgba(15, 34, 51, 0.18);" /></span>
+              <input id="n1-slider" type="range" min="1" max="300" value="10" step="1" />
+            </label>
+            <label class="control">
+              <span class="control__label">n2: <input id="n2-input" type="number" min="0.1" max="30.0" step="0.1" value="1.2" style="width: 60px; margin-left: 8px; padding: 4px; border-radius: 4px; border: 1px solid rgba(15, 34, 51, 0.18);" /></span>
+              <input id="n2-slider" type="range" min="1" max="300" value="12" step="1" />
+            </label>
+          </div>
+
+          <div class="texture-previews">
+            <div class="texture-preview">
+              <h4>Base</h4>
+              <img src="./pics/base_p2.png" alt="Base texture" />
+            </div>
+            <div class="texture-preview">
+              <h4>Env</h4>
+              <img src="./pics/env.png" alt="Environment texture" />
+            </div>
+          </div>
+
+          <!-- <div class="panel__footer">
+            <button class="button button--primary">Reset scene</button>
+            <button class="button button--ghost">Snapshot</button>
+          </div> -->
+        </aside>
+
         <section class="stage__content">
           <div class="content__demo">
             <h3>Demo</h3>
@@ -27,51 +74,6 @@
             <p> Lighting uses a movable light derived from the mouse: L is the direction from (uv,0) to (mouse_position,0.2), while the view direction V is fixed at (0,0,1). Diffuse is max(dot(N,L),0). Specular uses the Blinn-Phong half-vector H = normalize(L+V) with pow(max(dot(N,H),0), shininess). Ambient, diffuse, and specular are summed in linear space, then gamma-encoded for display. </p>
           </div>
         </section>
-
-        <!-- <aside class="panel">
-          <div class="panel__header">
-            <h2>Controls</h2>
-            <span class="panel__badge">Live</span>
-          </div>
-
-          <div class="control-group">
-            <label class="control toggle">
-              <input type="checkbox" checked />
-              <span class="toggle__track"></span>
-              <span class="control__label">Soft shadows</span>
-            </label>
-            <label class="control toggle">
-              <input type="checkbox" />
-              <span class="toggle__track"></span>
-              <span class="control__label">Rim light</span>
-            </label>
-            <label class="control toggle">
-              <input type="checkbox" checked />
-              <span class="toggle__track"></span>
-              <span class="control__label">Normal map</span>
-            </label>
-          </div>
-
-          <div class="control-group">
-            <label class="control">
-              <span class="control__label">Specular intensity</span>
-              <input type="range" min="0" max="100" value="70" />
-            </label>
-            <label class="control">
-              <span class="control__label">Light height</span>
-              <input type="range" min="0" max="100" value="42" />
-            </label>
-            <label class="control">
-              <span class="control__label">Surface roughness</span>
-              <input type="range" min="0" max="100" value="28" />
-            </label>
-          </div>
-
-          <div class="panel__footer">
-            <button class="button button--primary">Reset scene</button>
-            <button class="button button--ghost">Snapshot</button>
-          </div>
-        </aside> -->
       </main>
     </div>
 
