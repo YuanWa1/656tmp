@@ -12,7 +12,14 @@ uniform vec2 u_mouse;
 uniform float n1;
 uniform float n2;
 
-uniform sampler2D u_base;
+uniform sampler2D u_tex0;
+uniform sampler2D u_tex1;
+uniform sampler2D u_tex2;
+uniform sampler2D u_tex3;
+uniform sampler2D u_tex4;
+uniform sampler2D u_tex5;
+uniform sampler2D u_tex6;
+uniform sampler2D u_tex7;
 
 
 void main() {
@@ -35,7 +42,7 @@ void main() {
   float rr = dot(q, q);
 
   if (rr > 1.0) {
-    vec3 bg = texture(u_base, uv).rgb;
+    vec3 bg = texture(u_tex0, uv).rgb;
     bg= pow(clamp(bg, 0.0, 1.0), vec3(1.0/2.2));
     out_color = vec4(bg, 1.0);
     return;
@@ -111,7 +118,7 @@ void main() {
               Q = Q*0.5+0.5;
               Q = clamp(Q, 0.0, 1.0);
           
-              bgColor = pow(texture(u_base, Q).rgb, vec3(2.2));
+              bgColor = pow(texture(u_tex0, Q).rgb, vec3(2.2));
               
               bgColor = bgColor * (1.0 - F_sec);
           }

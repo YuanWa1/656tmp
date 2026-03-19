@@ -18,38 +18,73 @@
             <span class="panel__badge">Live</span>
           </div>
 
-          <div class="control-group">
-            <label class="control toggle">
-              <input id="all-reflection-checkbox" type="checkbox" />
-              <span class="toggle__track"></span>
-              <span class="control__label">All Reflection</span>
-            </label>
-            <label class="control toggle">
-              <input id="regular-checkbox" type="checkbox" checked />
-              <span class="toggle__track"></span>
-              <span class="control__label">Regular</span>
-            </label>
-          </div>
-
-          <div class="control-group">
-            <label class="control">
-              <span class="control__label">n1: <input id="n1-input" type="number" min="0.1" max="30.0" step="0.1" value="1.0" style="width: 60px; margin-left: 8px; padding: 4px; border-radius: 4px; border: 1px solid rgba(15, 34, 51, 0.18);" /></span>
-              <input id="n1-slider" type="range" min="1" max="300" value="10" step="1" />
-            </label>
-            <label class="control">
-              <span class="control__label">n2: <input id="n2-input" type="number" min="0.1" max="30.0" step="0.1" value="1.2" style="width: 60px; margin-left: 8px; padding: 4px; border-radius: 4px; border: 1px solid rgba(15, 34, 51, 0.18);" /></span>
-              <input id="n2-slider" type="range" min="1" max="300" value="12" step="1" />
-            </label>
-          </div>
-
-          <div class="texture-previews">
-            <div class="texture-preview">
-              <h4>Base</h4>
-              <img src="./pics/base_p2.png" alt="Base texture" />
-            </div>
-            <div class="texture-preview">
-              <h4>Env</h4>
-              <img src="./pics/env.png" alt="Environment texture" />
+          <div class="texture-slots">
+            <h3>Texture Slots (0-7)</h3>
+            <div class="texture-slot-list">
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 0</span>
+                <input id="tex-file-0" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-0" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 1</span>
+                <input id="tex-file-1" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-1" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 2</span>
+                <input id="tex-file-2" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-2" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 3</span>
+                <input id="tex-file-3" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-3" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 4</span>
+                <input id="tex-file-4" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-4" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 5</span>
+                <input id="tex-file-5" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-5" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 6</span>
+                <input id="tex-file-6" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-6" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
+              <div class="texture-slot-row">
+                <span class="texture-slot-index">Slot 7</span>
+                <input id="tex-file-7" type="file" accept="image/*" />
+                <label class="texture-slot-linear">
+                  <input id="tex-linear-7" type="checkbox" />
+                  <span>Linear (RGBA8)</span>
+                </label>
+              </div>
             </div>
           </div>
 
