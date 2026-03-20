@@ -101,7 +101,7 @@ function createTextureSlots() {
 function createTextureManager(gl) {
   const slots = createTextureSlots();
 
-  function replaceSlotTexture(index, bitmap, isLinear) {
+  function replaceSlotTexture(index, bitmap, isLinear,options = {}) {
     const slot = slots[index];
     if (!slot) {
       throw new Error(`Invalid texture slot index: ${index}`);
@@ -218,7 +218,7 @@ async function main() {
   const baseBitmap = await loadBitmap(`${basePath}pics/hw31.png`);
   const baseBitmap2 = await loadBitmap(`${basePath}pics/hw32.png`);
 
-  textureManager.setSlotBitmap(0, baseBitmap, false);
+  textureManager.setSlotBitmap(0, baseBitmap, true);
   textureManager.setSlotBitmap(1, baseBitmap2, true);
 
   let mouseX = canvas.width;
