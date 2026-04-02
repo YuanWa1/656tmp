@@ -34,9 +34,9 @@ void main() {
 
     vec3 currentPos = vec3(uv*2.0-1.0, getZ(uv));
 
-    vec3 LightPos = vec3(mouse_position, -0.9); 
+    vec3 LightPos = vec3(mouse_position, -1.0); 
 
-    float d = 0.01;
+    float d = 0.05;
     float a = d / 10.0;
 
     vec3 normals = normalize(texture(u_tex1,uv).rgb * 2.0 - 1.0);
@@ -57,7 +57,7 @@ void main() {
     for(int i = 0; i < K; i++) {
         currentPos = currentPos + stepVector;
         if(currentPos.z < getZ(currentPos.xy*0.5+0.5) && currentPos.z > - 0.8){
-            r = r + a;
+            r = r + length(stepVector);
         }else if(currentPos.z < -0.8){
             break;
         }
