@@ -1,7 +1,7 @@
 import "./style.css";
 
 import vertexShaderSource from "./shader/basic.vert?raw";
-import FragShaderSource from "./shader/Shadow.frag?raw";
+import FragShaderSource from "./shader/Basic_Ray_Tracing.frag?raw";
 
 import { render } from "./renderer.js";
 import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
@@ -215,8 +215,8 @@ async function main() {
   setupTextureSlotUI(textureManager);
 
   const basePath = import.meta.env.BASE_URL;
-  const baseBitmap = await loadBitmap(`${basePath}pics/hw31.png`);
-  const baseBitmap2 = await loadBitmap(`${basePath}pics/hw32.png`);
+  const baseBitmap = await loadBitmap(`${basePath}pics/env.png`);
+  const baseBitmap2 = await loadBitmap(`${basePath}pics/env.png`);
 
   textureManager.setSlotBitmap(0, baseBitmap, false);
   textureManager.setSlotBitmap(1, baseBitmap2, true);
@@ -227,9 +227,11 @@ async function main() {
 
   function setMousePosition(event) {
     const rect = canvas.getBoundingClientRect();
-    mouseX = event.clientX - rect.left;
-    mouseY = rect.height - (event.clientY - rect.top) - 1;
-    console.log(mouseX,mouseY,canvas.width, canvas.height); 
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    mouseX = (event.clientX - rect.left) * scaleX;
+    mouseY = canvas.height - (event.clientY - rect.top) * scaleY - 1;
   }
 
   canvas.addEventListener("mousemove", setMousePosition);
