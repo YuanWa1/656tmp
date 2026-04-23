@@ -1,7 +1,7 @@
 import "./style.css";
 
 import vertexShaderSource from "./shader/basic.vert?raw";
-import FragShaderSource from "./shader/Basic_Ray_Tracing.frag?raw";
+import FragShaderSource from "./FinalGathering.frag?raw";
 
 import { render } from "./renderer.js";
 import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
@@ -101,7 +101,7 @@ function createTextureSlots() {
 function createTextureManager(gl) {
   const slots = createTextureSlots();
 
-  function replaceSlotTexture(index, bitmap, isLinear,options = {}) {
+  function replaceSlotTexture(index, bitmap, isLinear, options = {}) {
     const slot = slots[index];
     if (!slot) {
       throw new Error(`Invalid texture slot index: ${index}`);
@@ -123,6 +123,7 @@ function createTextureManager(gl) {
       textureUnit: index,
       isLinear,
       generateMipmaps: true,
+      ...options,
     });
   }
 
@@ -215,14 +216,19 @@ async function main() {
   setupTextureSlotUI(textureManager);
 
   const basePath = import.meta.env.BASE_URL;
-  const baseBitmap = await loadBitmap(`${basePath}pics/env.png`);
-  const baseBitmap2 = await loadBitmap(`${basePath}pics/env.png`);
+  const environmentBitmap = await loadBitmap(`${basePath}pics/FinalGathering/env.png`);
+  const normalBitmap = await loadBitmap(`${basePath}pics/FinalGathering/normal1.png`);
+  const albedoBitmap = await loadBitmap(`${basePath}pics/base.png`);
 
-  textureManager.setSlotBitmap(0, baseBitmap, true);
-  textureManager.setSlotBitmap(1, baseBitmap2, true);
+  textureManager.setSlotBitmap(0, environmentBitmap, true, {
+    wrapS: gl.REPEAT,
+  });
+  textureManager.setSlotBitmap(2, normalBitmap, true);
+  textureManager.setSlotBitmap(3, albedoBitmap, true);
 
   let mouseX = canvas.width;
   let mouseY = canvas.height;
+  const startTime = performance.now();
   const textureUnitUniforms = createTextureUnitUniforms();
 
   function setMousePosition(event) {
@@ -242,6 +248,7 @@ async function main() {
     const uniforms = {
       u_resolution: { type: "2f", value: [gl.canvas.width, gl.canvas.height] },
       u_mouse: { type: "2f", value: [mouseX, mouseY] },
+      u_time: { type: "1f", value: (performance.now() - startTime) * 0.001 },
       ...textureUnitUniforms,
     };
 
