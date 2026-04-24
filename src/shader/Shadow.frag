@@ -34,7 +34,7 @@ void main() {
 
     vec3 currentPos = vec3(uv*2.0-1.0, getZ(uv));
 
-    vec3 LightPos = vec3(mouse_position, -0.9); 
+    vec3 LightPos = vec3(mouse_position, 0.2); 
 
     float d = 0.01;
     float a = d / 10.0;
@@ -48,7 +48,7 @@ void main() {
 
     //int K = int(ceil(length(LightPos - currentPos)/a));
 
-    int K = 100;
+    int K = 192;
 
     vec3 stepVector = a * lightDir;
 
