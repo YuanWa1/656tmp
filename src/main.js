@@ -1,7 +1,7 @@
 import "./style.css";
 
 import vertexShaderSource from "./shader/basic.vert?raw";
-import FragShaderSource from "./FinalGathering.frag?raw";
+import fragmentShaderSource from "./shader/path_trace.frag?raw";
 
 import { render } from "./renderer.js";
 import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
@@ -107,7 +107,6 @@ function createTextureManager(gl) {
       throw new Error(`Invalid texture slot index: ${index}`);
     }
 
-    // Delete old texture before creating a new one to avoid leaking GPU memory.
     if (slot.handle) {
       gl.deleteTexture(slot.handle);
       slot.handle = null;
@@ -190,46 +189,24 @@ function setupTextureSlotUI(textureManager) {
   }
 }
 
-function createTextureUnitUniforms() {
-  const uniforms = {};
-
-  for (let i = 0; i < TEXTURE_SLOT_COUNT; i += 1) {
-    uniforms[`u_tex${i}`] = { type: "1i", value: i };
-  }
-
-  return uniforms;
-}
-
 async function main() {
   const { canvas, gl } = initGL();
 
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, FragShaderSource);
+  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
   const material = linkProgram(gl, vertexShader, fragmentShader);
 
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
 
   const geometry = createFullscreenQuad(gl, material.program);
-
   const textureManager = createTextureManager(gl);
+
   setupTextureSlotUI(textureManager);
-
-  const basePath = import.meta.env.BASE_URL;
-  const environmentBitmap = await loadBitmap(`${basePath}pics/FinalGathering/env.png`);
-  const normalBitmap = await loadBitmap(`${basePath}pics/FinalGathering/normal1.png`);
-  const albedoBitmap = await loadBitmap(`${basePath}pics/base.png`);
-
-  textureManager.setSlotBitmap(0, environmentBitmap, true, {
-    wrapS: gl.REPEAT,
-  });
-  textureManager.setSlotBitmap(2, normalBitmap, true);
-  textureManager.setSlotBitmap(3, albedoBitmap, true);
 
   let mouseX = canvas.width;
   let mouseY = canvas.height;
   const startTime = performance.now();
-  const textureUnitUniforms = createTextureUnitUniforms();
 
   function setMousePosition(event) {
     const rect = canvas.getBoundingClientRect();
@@ -247,12 +224,17 @@ async function main() {
 
     const uniforms = {
       u_resolution: { type: "2f", value: [gl.canvas.width, gl.canvas.height] },
-      u_mouse: { type: "2f", value: [mouseX, mouseY] },
+      u_mouse: {
+        type: "2f",
+        value: [
+          gl.canvas.width > 0 ? mouseX / gl.canvas.width : 0,
+          gl.canvas.height > 0 ? mouseY / gl.canvas.height : 0,
+        ],
+      },
       u_time: { type: "1f", value: (performance.now() - startTime) * 0.001 },
-      ...textureUnitUniforms,
     };
 
-    render(gl, geometry, material, uniforms, textureManager.slots);
+    render(gl, geometry, material, uniforms);
     requestAnimationFrame(frame);
   }
 
