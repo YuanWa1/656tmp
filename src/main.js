@@ -5,9 +5,8 @@ import fragmentShaderSource from "./shader/path_trace.frag?raw";
 import displayShaderSource from "./shader/display.frag?raw";
 
 import { render } from "./renderer.js";
-import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
+import { compileShader, linkProgram } from "./webgl-utils.js";
 
-const TEXTURE_SLOT_COUNT = 8;
 const CAMERA_Z_SCROLL_SPEED = 0.002;
 const CAMERA_Z_MIN = -2.5;
 const CAMERA_Z_MAX = 2.0;
@@ -115,28 +114,6 @@ function deleteAccumulationTargets(gl, targets) {
   }
 }
 
-async function loadBitmap(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to load image: ${url}`);
-  }
-
-  const blob = await response.blob();
-  return createImageBitmap(blob, { imageOrientation: "flipY" });
-}
-
-async function loadBitmapFromFile(file) {
-  const objectUrl = URL.createObjectURL(file);
-
-  try {
-    const response = await fetch(objectUrl);
-    const blob = await response.blob();
-    return await createImageBitmap(blob, { imageOrientation: "flipY" });
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
 function resizeCanvasToDisplaySize(canvas) {
   const pixelRatio = window.devicePixelRatio || 1;
   const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio));
@@ -149,105 +126,6 @@ function resizeCanvasToDisplaySize(canvas) {
   }
 
   return false;
-}
-
-function createTextureSlots() {
-  return Array.from({ length: TEXTURE_SLOT_COUNT }, () => ({
-    handle: null,
-    bitmap: null,
-    isLinear: false,
-  }));
-}
-
-function createTextureManager(gl) {
-  const slots = createTextureSlots();
-
-  function replaceSlotTexture(index, bitmap, isLinear, options = {}) {
-    const slot = slots[index];
-    if (!slot) {
-      throw new Error(`Invalid texture slot index: ${index}`);
-    }
-
-    if (slot.handle) {
-      gl.deleteTexture(slot.handle);
-      slot.handle = null;
-    }
-
-    if (slot.bitmap && slot.bitmap !== bitmap && typeof slot.bitmap.close === "function") {
-      slot.bitmap.close();
-    }
-
-    slot.bitmap = bitmap;
-    slot.isLinear = isLinear;
-    slot.handle = createTexture2D(gl, bitmap, {
-      textureUnit: index,
-      isLinear,
-      generateMipmaps: true,
-      ...options,
-    });
-  }
-
-  async function updateSlot(index, file, isLinear) {
-    if (index < 0 || index >= slots.length) {
-      throw new Error(`Invalid texture slot index: ${index}`);
-    }
-
-    if (!file) {
-      return;
-    }
-
-    const bitmap = await loadBitmapFromFile(file);
-    replaceSlotTexture(index, bitmap, isLinear);
-  }
-
-  function updateSlotLinear(index, isLinear) {
-    const slot = slots[index];
-    if (!slot) {
-      return;
-    }
-
-    if (!slot.bitmap) {
-      slot.isLinear = isLinear;
-      return;
-    }
-
-    replaceSlotTexture(index, slot.bitmap, isLinear);
-  }
-
-  return {
-    slots,
-    updateSlot,
-    updateSlotLinear,
-    setSlotBitmap: replaceSlotTexture,
-  };
-}
-
-function setupTextureSlotUI(textureManager) {
-  for (let i = 0; i < TEXTURE_SLOT_COUNT; i += 1) {
-    const fileInput = document.getElementById(`tex-file-${i}`);
-    const linearInput = document.getElementById(`tex-linear-${i}`);
-
-    if (!(fileInput instanceof HTMLInputElement) || !(linearInput instanceof HTMLInputElement)) {
-      throw new Error(`Missing texture slot controls for index ${i}`);
-    }
-
-    fileInput.addEventListener("change", async () => {
-      const file = fileInput.files?.[0];
-      if (!file) {
-        return;
-      }
-
-      try {
-        await textureManager.updateSlot(i, file, linearInput.checked);
-      } catch (error) {
-        console.error(error);
-      }
-    });
-
-    linearInput.addEventListener("change", () => {
-      textureManager.updateSlotLinear(i, linearInput.checked);
-    });
-  }
 }
 
 async function main() {
@@ -267,9 +145,6 @@ async function main() {
   gl.deleteShader(displayFragmentShader);
 
   const geometry = createFullscreenQuad(gl, material.program);
-  const textureManager = createTextureManager(gl);
-
-  setupTextureSlotUI(textureManager);
 
   let mouseX = canvas.width;
   let mouseY = canvas.height;
