@@ -8,6 +8,9 @@ import { render } from "./renderer.js";
 import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
 
 const TEXTURE_SLOT_COUNT = 8;
+const CAMERA_Z_SCROLL_SPEED = 0.002;
+const CAMERA_Z_MIN = -2.5;
+const CAMERA_Z_MAX = 2.0;
 
 function initGL() {
   const canvas = document.querySelector("#glcanvas");
@@ -273,11 +276,16 @@ async function main() {
   let frameIndex = 0;
   let readTargetIndex = 0;
   let accumulationTargets = [];
+  let cameraZOffset = 0;
   const startTime = performance.now();
 
   function resetAccumulation() {
     frameIndex = 0;
     readTargetIndex = 0;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
   }
 
   function setMousePosition(event) {
@@ -296,6 +304,20 @@ async function main() {
   }
 
   canvas.addEventListener("mousemove", setMousePosition);
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+
+    const nextCameraZOffset = clamp(
+      cameraZOffset + event.deltaY * CAMERA_Z_SCROLL_SPEED,
+      CAMERA_Z_MIN,
+      CAMERA_Z_MAX,
+    );
+
+    if (nextCameraZOffset !== cameraZOffset) {
+      cameraZOffset = nextCameraZOffset;
+      resetAccumulation();
+    }
+  }, { passive: false });
 
   function frame() {
     const resized = resizeCanvasToDisplaySize(canvas);
@@ -312,6 +334,7 @@ async function main() {
       u_resolution: { type: "2f", value: [gl.canvas.width, gl.canvas.height] },
       u_previousFrame: { type: "1i", value: 0 },
       u_frame: { type: "1i", value: frameIndex },
+      u_cameraZOffset: { type: "1f", value: cameraZOffset },
       u_mouse: {
         type: "2f",
         value: [

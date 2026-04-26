@@ -6,6 +6,7 @@ in vec2 uv;
 
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
+uniform float u_cameraZOffset;
 uniform sampler2D u_previousFrame;
 uniform int u_frame;
 uniform float u_time;
@@ -26,7 +27,7 @@ const float RUSSIAN_ROULETTE_SURVIVAL = 0.95;
 
 const vec3 LIGHT_CENTER = vec3(0.0, 1.99, -0.2);
 const vec3 LIGHT_NORMAL = vec3(0.0, -1.0, 0.0);
-const vec3 LIGHT_EMISSION = vec3(18.0);
+const vec3 LIGHT_EMISSION = vec3(25.0);
 const vec2 LIGHT_X_RANGE = vec2(-0.33, 0.33);
 const vec2 LIGHT_Z_RANGE = vec2(-0.65, -0.05);
 const float LIGHT_AREA =
@@ -174,6 +175,79 @@ void intersectPlaneRect(
   commitHit(hit, t, pos, faceNormal, albedo, emission);
 }
 
+void intersectTriangle(
+  Ray ray,
+  vec3 v0,
+  vec3 v1,
+  vec3 v2,
+  vec3 albedo,
+  int material,
+  float ior,
+  inout Hit hit
+) {
+  vec3 edge1 = v1 - v0;
+  vec3 edge2 = v2 - v0;
+  vec3 pvec = cross(ray.dir, edge2);
+  float det = dot(edge1, pvec);
+
+  if (abs(det) < 1e-6) {
+    return;
+  }
+
+  float invDet = 1.0 / det;
+  vec3 tvec = ray.origin - v0;
+  float u = dot(tvec, pvec) * invDet;
+  if (u < 0.0 || u > 1.0) {
+    return;
+  }
+
+  vec3 qvec = cross(tvec, edge1);
+  float v = dot(ray.dir, qvec) * invDet;
+  if (v < 0.0 || u + v > 1.0) {
+    return;
+  }
+
+  float t = dot(edge2, qvec) * invDet;
+  if (!isCloser(t, hit)) {
+    return;
+  }
+
+  vec3 pos = ray.origin + t * ray.dir;
+  vec3 normal = normalize(cross(edge1, edge2));
+  vec3 faceNormal = dot(ray.dir, normal) < 0.0 ? normal : -normal;
+  commitHit(hit, t, pos, faceNormal, albedo, vec3(0.0));
+  hit.material = material;
+  hit.ior = ior;
+}
+
+void intersectPyramid(
+  Ray ray,
+  vec3 baseCenter,
+  float halfX,
+  float halfZ,
+  float height,
+  vec3 albedo,
+  int material,
+  float ior,
+  inout Hit hit
+) {
+  vec3 p0 = baseCenter + vec3(-halfX, 0.0, -halfZ);
+  vec3 p1 = baseCenter + vec3( halfX, 0.0, -halfZ);
+  vec3 p2 = baseCenter + vec3( halfX, 0.0,  halfZ);
+  vec3 p3 = baseCenter + vec3(-halfX, 0.0,  halfZ);
+  vec3 apex = baseCenter + vec3(0.0, height, 0.0);
+
+  // Four side faces.
+  intersectTriangle(ray, p0, p1, apex, albedo, material, ior, hit);
+  intersectTriangle(ray, p1, p2, apex, albedo, material, ior, hit);
+  intersectTriangle(ray, p2, p3, apex, albedo, material, ior, hit);
+  intersectTriangle(ray, p3, p0, apex, albedo, material, ior, hit);
+
+  // Thin bottom, lifted slightly above the floor to avoid coplanar hits.
+  intersectTriangle(ray, p0, p2, p1, albedo, material, ior, hit);
+  intersectTriangle(ray, p0, p3, p2, albedo, material, ior, hit);
+}
+
 bool intersectScene(Ray ray, out Hit hit) {
   initHit(hit);
 
@@ -202,6 +276,17 @@ bool intersectScene(Ray ray, out Hit hit) {
 
   intersectSphere(ray, vec3(-0.52, 0.42, -0.68), 0.42, vec3(0.92), MAT_DIFFUSE, 1.0, hit);
   intersectSphere(ray, vec3(0.45, 0.36, -0.58), 0.36, vec3(1.0), MAT_DIELECTRIC, GLASS_IOR, hit);
+  intersectPyramid(
+    ray,
+    vec3(0.0, 0.0, -1.08),
+    0.13,
+    0.16,
+    0.36,
+    vec3(0.86, 0.68, 0.38),
+    MAT_DIFFUSE,
+    1.0,
+    hit
+  );
 
   return hit.t < INF;
 }
@@ -323,10 +408,10 @@ Ray makeCameraRay(vec2 sampleUv) {
   vec2 screen = sampleUv * 2.0 - 1.0;
   screen.x *= u_resolution.x / max(u_resolution.y, 1.0);
 
-  float yaw = mix(-0.35, 0.35, u_mouse.x);
-  float pitch = mix(-0.08, 0.18, u_mouse.y);
+  float yaw = mix(-0.5, 0.5, u_mouse.x);
+  float pitch = mix(-0.18, 0.18, u_mouse.y);
 
-  vec3 target = vec3(0.0, 0.9, -0.75);
+  vec3 target = vec3(0.0, 0.9, -0.75 + u_cameraZOffset);
   float camDist = 3.3;
   vec3 camPos = target + vec3(
     sin(yaw) * cos(pitch),
