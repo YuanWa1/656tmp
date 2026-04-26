@@ -6,12 +6,14 @@ in vec2 uv;
 
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
+uniform sampler2D u_previousFrame;
+uniform int u_frame;
 uniform float u_time;
 
 out vec4 outColor;
 
-const int SAMPLES = 4;
-const int MAX_BOUNCES = 5;
+const int SAMPLES = 16;
+const int MAX_BOUNCES = 18;
 
 const float PI = 3.14159265359;
 const float INF = 1e20;
@@ -87,12 +89,11 @@ uint hashUint(uint x) {
 }
 
 uint makeSeed(ivec2 pixel, int sampleIndex, int bounceIndex) {
-  uint timeSeed = uint(max(0.0, floor(u_time * 1000.0)));
   uint seed = uint(pixel.x) * 1973u;
   seed ^= uint(pixel.y) * 9277u;
   seed ^= uint(sampleIndex + 1) * 26699u;
   seed ^= uint(bounceIndex + 1) * 911u;
-  seed ^= timeSeed * 1597334677u;
+  seed ^= uint(u_frame + 1) * 1597334677u;
   return hashUint(seed);
 }
 
@@ -344,6 +345,7 @@ Ray makeCameraRay(vec2 sampleUv) {
 vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
   vec3 radiance = vec3(0.0);
   vec3 throughput = vec3(1.0);
+  bool allowEmitterHit = true;
 
   for (int bounce = 0; bounce < MAX_BOUNCES; ++bounce) {
     rngState ^= makeSeed(pixel, sampleIndex, bounce);
@@ -354,7 +356,9 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
     }
 
     if (length(hit.emission) > 0.0) {
-      radiance += throughput * hit.emission;
+      if (allowEmitterHit) {
+        radiance += throughput * hit.emission;
+      }
       break;
     }
 
@@ -367,6 +371,7 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
       vec3 offsetNormal = dot(nextDir, hit.normal) > 0.0 ? hit.normal : -hit.normal;
       ray.origin = hit.pos + offsetNormal * EPS;
       ray.dir = normalize(nextDir);
+      allowEmitterHit = true;
       continue;
     }
 
@@ -381,6 +386,7 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
 
     ray.origin = hit.pos + hit.normal * EPS;
     ray.dir = nextDir;
+    allowEmitterHit = false;
   }
 
   return radiance;
@@ -403,8 +409,11 @@ void main() {
 
   vec3 color = accumulatedRadiance / float(SAMPLES);
 
-  color = color / (color + vec3(1.0));
-  color = pow(color, vec3(1.0 / 2.2));
+  if (u_frame > 0) {
+    vec3 previousColor = texelFetch(u_previousFrame, pixel, 0).rgb;
+    float frameWeight = float(u_frame);
+    color = (previousColor * frameWeight + color) / (frameWeight + 1.0);
+  }
 
   outColor = vec4(color, 1.0);
 }

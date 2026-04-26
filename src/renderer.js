@@ -37,10 +37,17 @@ function bindTextureSlots(gl, textureSlots) {
     }
 }
 
-export function render(gl, geometry, material, uniforms, textureSlots = []) {
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+export function render(gl, geometry, material, uniforms, textureSlots = [], options = {}) {
+    const width = options.width ?? gl.canvas.width;
+    const height = options.height ?? gl.canvas.height;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, options.framebuffer ?? null);
+    gl.viewport(0, 0, width, height);
+
+    if (options.clear ?? true) {
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+    }
 
     gl.useProgram(material.program);
     bindTextureSlots(gl, textureSlots);
@@ -56,4 +63,5 @@ export function render(gl, geometry, material, uniforms, textureSlots = []) {
 
     gl.drawArrays(geometry.drawMode ?? gl.TRIANGLES, 0, geometry.count);
     gl.bindVertexArray(null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
