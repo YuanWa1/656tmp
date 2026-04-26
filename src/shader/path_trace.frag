@@ -16,6 +16,11 @@ const int MAX_BOUNCES = 5;
 const float PI = 3.14159265359;
 const float INF = 1e20;
 const float EPS = 0.001;
+const int MAT_DIFFUSE = 0;
+const int MAT_DIELECTRIC = 1;
+const float GLASS_IOR = 1.5;
+const int RUSSIAN_ROULETTE_START = 3;
+const float RUSSIAN_ROULETTE_SURVIVAL = 0.95;
 
 const vec3 LIGHT_CENTER = vec3(0.0, 1.99, -0.2);
 const vec3 LIGHT_NORMAL = vec3(0.0, -1.0, 0.0);
@@ -36,6 +41,8 @@ struct Hit {
   vec3 normal;
   vec3 albedo;
   vec3 emission;
+  int material;
+  float ior;
 };
 
 void initHit(out Hit hit) {
@@ -44,6 +51,8 @@ void initHit(out Hit hit) {
   hit.normal = vec3(0.0, 1.0, 0.0);
   hit.albedo = vec3(0.0);
   hit.emission = vec3(0.0);
+  hit.material = MAT_DIFFUSE;
+  hit.ior = 1.0;
 }
 
 bool isCloser(float t, Hit hit) {
@@ -63,6 +72,8 @@ void commitHit(
   hit.normal = normal;
   hit.albedo = albedo;
   hit.emission = emission;
+  hit.material = MAT_DIFFUSE;
+  hit.ior = 1.0;
 }
 
 // A small integer hash for deterministic per-pixel random seeds.
@@ -101,6 +112,8 @@ void intersectSphere(
   vec3 center,
   float radius,
   vec3 albedo,
+  int material,
+  float ior,
   inout Hit hit
 ) {
   vec3 oc = ray.origin - center;
@@ -123,6 +136,8 @@ void intersectSphere(
   vec3 pos = ray.origin + t * ray.dir;
   vec3 normal = normalize(pos - center);
   commitHit(hit, t, pos, normal, albedo, vec3(0.0));
+  hit.material = material;
+  hit.ior = ior;
 }
 
 void intersectPlaneRect(
@@ -184,8 +199,8 @@ bool intersectScene(Ray ray, out Hit hit) {
     hit
   );
 
-  intersectSphere(ray, vec3(-0.52, 0.42, -0.68), 0.42, vec3(0.92), hit);
-  intersectSphere(ray, vec3(0.45, 0.36, -0.58), 0.36, vec3(0.9, 0.9, 0.94), hit);
+  intersectSphere(ray, vec3(-0.52, 0.42, -0.68), 0.42, vec3(0.92), MAT_DIFFUSE, 1.0, hit);
+  intersectSphere(ray, vec3(0.45, 0.36, -0.58), 0.36, vec3(1.0), MAT_DIELECTRIC, GLASS_IOR, hit);
 
   return hit.t < INF;
 }
@@ -257,6 +272,44 @@ vec3 cosineWeightedHemisphere(vec3 normal, inout uint rngState) {
   return normalize(tangentBasis(normal) * localDir);
 }
 
+float fresnelSchlick(float cosTheta, float etaI, float etaT) {
+  float r0 = (etaI - etaT) / (etaI + etaT);
+  r0 *= r0;
+  return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
+}
+
+vec3 sampleDielectric(Hit hit, Ray ray, inout uint rngState) {
+  bool frontFace = dot(ray.dir, hit.normal) < 0.0;
+  vec3 normal = frontFace ? hit.normal : -hit.normal;
+  float etaI = frontFace ? 1.0 : hit.ior;
+  float etaT = frontFace ? hit.ior : 1.0;
+  float eta = etaI / etaT;
+
+  float cosTheta = min(dot(-ray.dir, normal), 1.0);
+  float sin2Theta = max(0.0, 1.0 - cosTheta * cosTheta);
+  bool cannotRefract = eta * eta * sin2Theta > 1.0;
+  float fresnel = fresnelSchlick(cosTheta, etaI, etaT);
+
+  if (cannotRefract || rand(rngState) < fresnel) {
+    return reflect(ray.dir, normal);
+  }
+
+  return refract(ray.dir, normal, eta);
+}
+
+bool surviveRussianRoulette(int bounce, inout vec3 throughput, inout uint rngState) {
+  if (bounce < RUSSIAN_ROULETTE_START) {
+    return true;
+  }
+
+  if (rand(rngState) > RUSSIAN_ROULETTE_SURVIVAL) {
+    return false;
+  }
+
+  throughput /= RUSSIAN_ROULETTE_SURVIVAL;
+  return true;
+}
+
 // Constructs an orthonormal basis matrix given a forward and up vector.
 mat3 cameraBasis(vec3 forward, vec3 up) {
   vec3 f = normalize(forward);
@@ -305,7 +358,23 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
       break;
     }
 
+    if (hit.material == MAT_DIELECTRIC) {
+      if (!surviveRussianRoulette(bounce, throughput, rngState)) {
+        break;
+      }
+
+      vec3 nextDir = sampleDielectric(hit, ray, rngState);
+      vec3 offsetNormal = dot(nextDir, hit.normal) > 0.0 ? hit.normal : -hit.normal;
+      ray.origin = hit.pos + offsetNormal * EPS;
+      ray.dir = normalize(nextDir);
+      continue;
+    }
+
     radiance += throughput * sampleAreaLight(hit, rngState);
+
+    if (!surviveRussianRoulette(bounce, throughput, rngState)) {
+      break;
+    }
 
     vec3 nextDir = cosineWeightedHemisphere(hit.normal, rngState);
     throughput *= hit.albedo;
