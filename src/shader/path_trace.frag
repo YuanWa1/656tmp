@@ -13,7 +13,7 @@ uniform float u_time;
 
 out vec4 outColor;
 
-const int SAMPLES = 16;
+const int SAMPLES = 2;
 const int MAX_BOUNCES = 18;
 
 const float PI = 3.14159265359;
@@ -274,11 +274,11 @@ bool intersectScene(Ray ray, out Hit hit) {
     hit
   );
 
-  intersectSphere(ray, vec3(-0.52, 0.42, -0.68), 0.42, vec3(0.92), MAT_DIFFUSE, 1.0, hit);
+  intersectSphere(ray, vec3(-0.52, 0.42, -0.68), 0.42, vec3(0.92), MAT_DIELECTRIC, 10.0, hit);
   intersectSphere(ray, vec3(0.45, 0.36, -0.58), 0.36, vec3(1.0), MAT_DIELECTRIC, GLASS_IOR, hit);
   intersectPyramid(
     ray,
-    vec3(0.0, 0.0, -1.08),
+    vec3(0.0, 0.0, -0.6),
     0.13,
     0.16,
     0.36,
