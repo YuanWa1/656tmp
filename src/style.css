@@ -115,9 +115,10 @@ body {
 }
 
 .stage__frame canvas {
-  width: min(64vw, 640px);
-  max-width: 640px;
-  aspect-ratio: 1;
+  width: 100%;
+  max-width: 960px;
+  height: auto;
+  touch-action: none;
   border-radius: 18px;
   border: 1px solid rgba(15, 34, 51, 0.12);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
@@ -365,6 +366,21 @@ input[type="range"]::-moz-range-thumb {
   }
 
   .stage__frame canvas {
-    width: min(82vw, 520px);
+    width: 100%;
   }
+}
+
+.panel select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: #fff;
+  font: inherit;
+}
+
+.control__label output {
+  float: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }

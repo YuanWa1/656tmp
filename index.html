@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>656tmp_p1</title>
+    <title>Normal Map Shading</title>
   </head>
   <body>
     <div class="page">
@@ -11,6 +11,58 @@
         <section class="stage__frame">
           <canvas id="glcanvas" width="640" height="640"></canvas>
         </section>
+
+        <aside class="panel">
+          <div class="panel__header">
+            <h2>Controls</h2>
+            <span class="panel__badge">Live</span>
+          </div>
+
+          <div class="control-group">
+            <label class="control">
+              <span class="control__label">View</span>
+              <select id="view">
+                <option value="0">Shaded (ambient + diffuse + specular)</option>
+                <option value="1">Diffuse term only (N&middot;L)</option>
+                <option value="2">Decoded normals</option>
+              </select>
+            </label>
+            <label class="control toggle">
+              <input type="checkbox" id="orbit" />
+              <span class="toggle__track"></span>
+              <span class="control__label">Auto-orbit light</span>
+            </label>
+            <label class="control toggle">
+              <input type="checkbox" id="specular" checked />
+              <span class="toggle__track"></span>
+              <span class="control__label">Specular</span>
+            </label>
+            <label class="control toggle">
+              <input type="checkbox" id="flipGreen" />
+              <span class="toggle__track"></span>
+              <span class="control__label">Flip green channel (DirectX-style map)</span>
+            </label>
+          </div>
+
+          <div class="control-group">
+            <label class="control">
+              <span class="control__label">Light height <output id="lightHeight-out"></output></span>
+              <input type="range" id="lightHeight" min="0.02" max="1.5" step="0.01" value="0.3" />
+            </label>
+            <label class="control">
+              <span class="control__label">Specular strength <output id="ks-out"></output></span>
+              <input type="range" id="ks" min="0" max="1" step="0.01" value="0.15" />
+            </label>
+            <label class="control">
+              <span class="control__label">Shininess <output id="shininess-out"></output></span>
+              <input type="range" id="shininess" min="1" max="256" step="1" value="32" />
+            </label>
+            <label class="control">
+              <span class="control__label">Ambient <output id="ambient-out"></output></span>
+              <input type="range" id="ambient" min="0" max="0.3" step="0.005" value="0.05" />
+            </label>
+          </div>
+        </aside>
 
         <section class="stage__content">
           <div class="content__demo">
@@ -28,50 +80,6 @@
           </div>
         </section>
 
-        <!-- <aside class="panel">
-          <div class="panel__header">
-            <h2>Controls</h2>
-            <span class="panel__badge">Live</span>
-          </div>
-
-          <div class="control-group">
-            <label class="control toggle">
-              <input type="checkbox" checked />
-              <span class="toggle__track"></span>
-              <span class="control__label">Soft shadows</span>
-            </label>
-            <label class="control toggle">
-              <input type="checkbox" />
-              <span class="toggle__track"></span>
-              <span class="control__label">Rim light</span>
-            </label>
-            <label class="control toggle">
-              <input type="checkbox" checked />
-              <span class="toggle__track"></span>
-              <span class="control__label">Normal map</span>
-            </label>
-          </div>
-
-          <div class="control-group">
-            <label class="control">
-              <span class="control__label">Specular intensity</span>
-              <input type="range" min="0" max="100" value="70" />
-            </label>
-            <label class="control">
-              <span class="control__label">Light height</span>
-              <input type="range" min="0" max="100" value="42" />
-            </label>
-            <label class="control">
-              <span class="control__label">Surface roughness</span>
-              <input type="range" min="0" max="100" value="28" />
-            </label>
-          </div>
-
-          <div class="panel__footer">
-            <button class="button button--primary">Reset scene</button>
-            <button class="button button--ghost">Snapshot</button>
-          </div>
-        </aside> -->
       </main>
     </div>
 
