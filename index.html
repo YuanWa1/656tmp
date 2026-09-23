@@ -74,9 +74,11 @@
           </div>
           <div class="content__description">
             <h2>Description</h2>
-            <p> This fragment shader implements per-pixel lighting using the Blinn-Phong model on a flat 2D surface in UV space. It samples an albedo texture for base color and a tangent-space normal map for per-pixel surface orientation. </p> 
-            <p> The normal map is stored in RGB in [0,1] and is decoded to a signed normal in [-1,1] with N = normalize(nTex * 2.0 - 1.0). This decoded normal replaces geometric normals and creates a 3D appearance on a flat plane. </p> 
-            <p> Lighting uses a movable light derived from the mouse: L is the direction from (uv,0) to (mouse_position,0.2), while the view direction V is fixed at (0,0,1). Diffuse is max(dot(N,L),0). Specular uses the Blinn-Phong half-vector H = normalize(L+V) with pow(max(dot(N,H),0), shininess). Ambient, diffuse, and specular are summed in linear space, then gamma-encoded for display. </p>
+            <p>A flat quad is lit per pixel with the Blinn-Phong model. Its surface detail comes entirely from a tangent-space normal map, which makes the flat image look like it has depth.</p>
+            <p><strong>Textures.</strong> The albedo is uploaded as sRGB, so sampling returns linear color. The normal map is uploaded as raw RGBA8 and decoded with <code>N = normalize(tex * 2.0 - 1.0)</code>. The renormalize is needed because mipmap filtering shortens the vector. Maps authored in the DirectX convention can be handled by flipping the green channel.</p>
+            <p><strong>Light.</strong> A point light sits at the mouse position, at an adjustable height above the plane. <code>L</code> is computed in aspect-corrected units so the light falls off evenly in x and y on non-square images. The view is orthographic, with <code>V = (0, 0, 1)</code>.</p>
+            <p><strong>Shading.</strong> Diffuse is <code>max(N·L, 0)</code>. Specular uses the half vector <code>H = normalize(L + V)</code> and <code>pow(max(N·H, 0), shininess)</code>. It only applies where <code>N·L &gt; 0</code> and fades out near the terminator, so surfaces facing away from the light never get a stray highlight. Ambient, diffuse and specular are summed in linear space, then gamma-encoded for display.</p>
+            <p><strong>Controls.</strong> The panel adjusts light height, specular strength, shininess and ambient. It also switches between the shaded result, the diffuse term alone and the decoded normals, and can orbit the light automatically.</p>
           </div>
         </section>
 
