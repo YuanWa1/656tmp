@@ -158,6 +158,13 @@ body {
   margin: 0 0 16px 0;
 }
 
+.content__description code {
+  font-size: 0.9em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.15);
+}
+
 .stage__glow {
   position: absolute;
   width: 360px;
