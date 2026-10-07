@@ -237,6 +237,51 @@ body {
   gap: 16px;
 }
 
+/* Keep the restored eight-slot upload panel compact and usable on narrow screens. */
+.panel {
+  align-self: start;
+}
+
+.texture-slots summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.texture-slots p,
+.texture-slot-row small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.texture-slot-list,
+.texture-slot-row {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.texture-slot-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.texture-slot-row input[type="file"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.texture-slot-linear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+#app-status:empty {
+  display: none;
+}
+
 .control {
   display: grid;
   gap: 10px;

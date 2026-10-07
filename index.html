@@ -10,6 +10,7 @@
       <main class="stage">
         <section class="stage__frame">
           <canvas id="glcanvas" width="640" height="640"></canvas>
+          <p id="app-status" role="status"></p>
         </section>
 
         <aside class="panel">
@@ -17,6 +18,13 @@
             <h2>Controls</h2>
             <span class="panel__badge">Live</span>
           </div>
+
+          <!-- Restore main's upload slots with explicit bindings for this normal-map shader. -->
+          <details class="texture-slots" open>
+            <summary>Texture uploads (0–7)</summary>
+            <p>Slot 0: albedo (sRGB). Slot 1: normal (linear). Slots 2–7 are available for other shaders.</p>
+            <div id="texture-slot-list" class="texture-slot-list"></div>
+          </details>
 
           <div class="control-group">
             <label class="control">
@@ -79,6 +87,7 @@
             <p><strong>Light.</strong> A point light sits at the mouse position, at an adjustable height above the plane. <code>L</code> is computed in aspect-corrected units so the light falls off evenly in x and y on non-square images. The view is orthographic, with <code>V = (0, 0, 1)</code>.</p>
             <p><strong>Shading.</strong> Diffuse is <code>max(N·L, 0)</code>. Specular uses the half vector <code>H = normalize(L + V)</code> and <code>pow(max(N·H, 0), shininess)</code>. It only applies where <code>N·L &gt; 0</code> and fades out near the terminator, so surfaces facing away from the light never get a stray highlight. Ambient, diffuse and specular are summed in linear space, then gamma-encoded for display.</p>
             <p><strong>Controls.</strong> The panel adjusts light height, specular strength, shininess and ambient. It also switches between the shaded result, the diffuse term alone and the decoded normals, and can orbit the light automatically.</p>
+            <p><strong>Uploads.</strong> Replace the albedo in slot 0 or the normal map in slot 1 with a local image. Albedo defaults to sRGB; normal maps default to linear RGBA8. Uploading a normal map updates the canvas aspect ratio. Slots 2–7 are retained from the shared framework for other shaders.</p>
           </div>
         </section>
 
