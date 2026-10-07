@@ -99,14 +99,21 @@ body {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) 320px;
   gap: 28px;
-  align-items: center;
+  /* A tall controls panel must never push the preview down the page. */
+  align-items: start;
+}
+
+.stage__preview {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
 }
 
 .stage__frame {
   position: relative;
   display: grid;
   place-items: center;
-  padding: 36px;
+  padding: 24px;
   border-radius: 28px;
   background: linear-gradient(145deg, rgba(244, 248, 255, 0.98), rgba(219, 234, 248, 0.95));
   border: 1px solid var(--panel-border);
@@ -237,7 +244,7 @@ body {
   gap: 16px;
 }
 
-/* Keep the restored eight-slot upload panel compact and usable on narrow screens. */
+/* The active maps sit side by side below the preview; unused slots stay collapsed. */
 .panel {
   align-self: start;
 }
@@ -262,8 +269,25 @@ body {
 }
 
 .texture-slot-row {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--panel-border);
+  padding: 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.texture-slot-list--primary,
+.texture-slot-list--extra {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.texture-slot-title {
+  font-weight: 600;
+}
+
+.texture-slots__extra {
+  border-top: 1px solid var(--panel-border);
+  padding-top: 14px;
 }
 
 .texture-slot-row input[type="file"] {
@@ -409,6 +433,11 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (max-width: 640px) {
+  .texture-slot-list--primary,
+  .texture-slot-list--extra {
+    grid-template-columns: 1fr;
+  }
+
   .page {
     padding: 20px 16px 32px;
   }

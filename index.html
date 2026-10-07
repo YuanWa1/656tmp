@@ -8,23 +8,31 @@
   <body>
     <div class="page">
       <main class="stage">
-        <section class="stage__frame">
-          <canvas id="glcanvas" width="640" height="640"></canvas>
-          <p id="app-status" role="status"></p>
-        </section>
+        <!-- Keep surface uploads with the preview so they cannot stretch the lighting sidebar. -->
+        <div class="stage__preview">
+          <section class="stage__frame">
+            <canvas id="glcanvas" width="640" height="640"></canvas>
+            <p id="app-status" role="status"></p>
+          </section>
+
+          <section class="panel texture-slots" aria-labelledby="textures-title">
+            <div class="panel__header">
+              <h2 id="textures-title">Textures</h2>
+            </div>
+            <div id="texture-slot-list" class="texture-slot-list texture-slot-list--primary"></div>
+            <details class="texture-slots__extra">
+              <summary>Additional slots (2–7)</summary>
+              <p>These slots are available for other shaders and do not affect this preview.</p>
+              <div id="texture-slot-extra" class="texture-slot-list texture-slot-list--extra"></div>
+            </details>
+          </section>
+        </div>
 
         <aside class="panel">
           <div class="panel__header">
             <h2>Controls</h2>
             <span class="panel__badge">Live</span>
           </div>
-
-          <!-- Restore main's upload slots with explicit bindings for this normal-map shader. -->
-          <details class="texture-slots" open>
-            <summary>Texture uploads (0–7)</summary>
-            <p>Slot 0: albedo (sRGB). Slot 1: normal (linear). Slots 2–7 are available for other shaders.</p>
-            <div id="texture-slot-list" class="texture-slot-list"></div>
-          </details>
 
           <div class="control-group">
             <label class="control">

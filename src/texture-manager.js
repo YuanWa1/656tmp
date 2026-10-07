@@ -69,18 +69,20 @@ export function createTextureManager(gl, onChange = () => {}) {
 // All eight framework slots remain available; this shader samples only albedo 0 and normal 1.
 export function setupTextureSlotUI(manager) {
   const container = document.getElementById('texture-slot-list');
+  const extraContainer = document.getElementById('texture-slot-extra');
   for (let index = 0; index < TEXTURE_SLOT_COUNT; index += 1) {
     const row = document.createElement('div');
     row.className = 'texture-slot-row';
-    const label = index === 0 ? 'Albedo' : index === 1 ? 'Normal' : 'Unused by this shader';
+    const label = index === 0 ? 'Albedo' : index === 1 ? 'Normal' : `Slot ${index}`;
     row.innerHTML = `
-      <label for="tex-file-${index}">Slot ${index} · ${label}</label>
+      <label class="texture-slot-title" for="tex-file-${index}">${label}</label>
       <input id="tex-file-${index}" type="file" accept="image/*" />
       <label class="texture-slot-linear">
         <input id="tex-linear-${index}" type="checkbox" /> Linear (RGBA8)
       </label>
       <small id="tex-status-${index}" role="status">${index < 2 ? 'Default texture' : 'Empty'}</small>`;
-    container.append(row);
+    // Show the two active maps first; keep framework-only slots in the collapsed section.
+    (index < 2 ? container : extraContainer).append(row);
     const fileInput = row.querySelector(`#tex-file-${index}`);
     const linearInput = row.querySelector(`#tex-linear-${index}`);
     const status = row.querySelector('small');
