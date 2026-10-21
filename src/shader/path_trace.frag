@@ -7,6 +7,7 @@ in vec2 uv;
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_cameraZOffset;
+uniform vec3 u_cameraOffset;
 uniform sampler2D u_previousFrame;
 uniform int u_frame;
 uniform float u_time;
@@ -21,17 +22,9 @@ const float INF = 1e20;
 const float EPS = 0.001;
 const int MAT_DIFFUSE = 0;
 const int MAT_DIELECTRIC = 1;
-const float GLASS_IOR = 1.5;
+const float WATER_IOR = 1.333;
 const int RUSSIAN_ROULETTE_START = 3;
 const float RUSSIAN_ROULETTE_SURVIVAL = 0.95;
-
-const vec3 LIGHT_CENTER = vec3(0.0, 1.99, -0.2);
-const vec3 LIGHT_NORMAL = vec3(0.0, -1.0, 0.0);
-const vec3 LIGHT_EMISSION = vec3(25.0);
-const vec2 LIGHT_X_RANGE = vec2(-0.33, 0.33);
-const vec2 LIGHT_Z_RANGE = vec2(-0.65, -0.05);
-const float LIGHT_AREA =
-  (LIGHT_X_RANGE.y - LIGHT_X_RANGE.x) * (LIGHT_Z_RANGE.y - LIGHT_Z_RANGE.x);
 
 struct Ray {
   vec3 origin;
@@ -248,93 +241,75 @@ void intersectPyramid(
   intersectTriangle(ray, p0, p3, p2, albedo, material, ior, hit);
 }
 
+// A flat water interface closes the lower half of an ellipsoidal depression.
+// Sharing its rim with the dry ground avoids floating water and open side walls.
+void intersectPuddleGround(Ray ray, inout Hit hit) {
+  vec3 center = vec3(0.0, 0.0, -0.2);
+  vec3 radii = vec3(1.25, 0.08, 0.85);
+  vec3 groundColor = vec3(0.24, 0.22, 0.19);
+
+  if (abs(ray.dir.y) > 1e-5) {
+    float t = -ray.origin.y / ray.dir.y;
+    if (isCloser(t, hit)) {
+      vec3 pos = ray.origin + t * ray.dir;
+      vec2 footprint = (pos.xz - center.xz) / radii.xz;
+      bool water = dot(footprint, footprint) < 1.0;
+      // Keep the water normal outward even for rays exiting from below;
+      // sampleDielectric uses its orientation to choose the two media.
+      vec3 normal = vec3(0.0, 1.0, 0.0);
+      commitHit(hit, t, pos, normal, groundColor, vec3(0.0));
+      if (water) {
+        hit.material = MAT_DIELECTRIC;
+        hit.ior = WATER_IOR;
+      }
+    }
+  }
+
+  // Transform into a unit sphere without normalizing the direction, so t
+  // stays in world units. Only the lower hemisphere is the submerged bed.
+  vec3 origin = (ray.origin - center) / radii;
+  vec3 direction = ray.dir / radii;
+  float a = dot(direction, direction);
+  float b = dot(origin, direction);
+  float c = dot(origin, origin) - 1.0;
+  float discriminant = b * b - a * c;
+  if (discriminant < 0.0) return;
+  float root = sqrt(discriminant);
+  for (int i = 0; i < 2; ++i) {
+    float t = (-b + (i == 0 ? -root : root)) / a;
+    vec3 pos = ray.origin + t * ray.dir;
+    if (isCloser(t, hit) && pos.y < center.y) {
+      vec3 normal = -normalize((pos - center) / (radii * radii));
+      commitHit(hit, t, pos, normal, groundColor, vec3(0.0));
+    }
+  }
+}
+
 bool intersectScene(Ray ray, out Hit hit) {
   initHit(hit);
-
-  vec3 white = vec3(0.78);
-  vec3 red = vec3(0.85, 0.2, 0.16);
-  vec3 blue = vec3(0.28, 0.25, 0.75);
-
-  intersectPlaneRect(ray, vec3(-1.2, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec2(0.0, -1.6), vec2(2.0, 1.0), 1, 2, blue, vec3(0.0), hit);
-  intersectPlaneRect(ray, vec3(1.2, 0.0, 0.0), vec3(-1.0, 0.0, 0.0), vec2(0.0, -1.6), vec2(2.0, 1.0), 1, 2, red, vec3(0.0), hit);
-  intersectPlaneRect(ray, vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(-1.2, -1.6), vec2(1.2, 1.0), 0, 2, white, vec3(0.0), hit);
-  intersectPlaneRect(ray, vec3(0.0, 2.0, 0.0), vec3(0.0, -1.0, 0.0), vec2(-1.2, -1.6), vec2(1.2, 1.0), 0, 2, white, vec3(0.0), hit);
-  intersectPlaneRect(ray, vec3(0.0, 0.0, -1.6), vec3(0.0, 0.0, 1.0), vec2(-1.2, 0.0), vec2(1.2, 2.0), 0, 1, white, vec3(0.0), hit);
-
-  intersectPlaneRect(
-    ray,
-    LIGHT_CENTER,
-    LIGHT_NORMAL,
-    vec2(LIGHT_X_RANGE.x, LIGHT_Z_RANGE.x),
-    vec2(LIGHT_X_RANGE.y, LIGHT_Z_RANGE.y),
-    0,
-    2,
-    vec3(1.0),
-    LIGHT_EMISSION,
-    hit
-  );
-
-  intersectSphere(ray, vec3(-0.52, 0.42, -0.68), 0.42, vec3(0.92), MAT_DIELECTRIC, 10.0, hit);
-  intersectSphere(ray, vec3(0.45, 0.36, -0.58), 0.36, vec3(1.0), MAT_DIELECTRIC, GLASS_IOR, hit);
-  intersectPyramid(
-    ray,
-    vec3(0.0, 0.0, -0.6),
-    0.13,
-    0.16,
-    0.36,
-    vec3(0.86, 0.68, 0.38),
-    MAT_DIFFUSE,
-    1.0,
-    hit
-  );
-
+  intersectPuddleGround(ray, hit);
   return hit.t < INF;
 }
 
-bool visibleToLight(vec3 origin, vec3 dir, float lightDist) {
-  Ray shadowRay;
-  shadowRay.origin = origin;
-  shadowRay.dir = dir;
+// Returns linear radiance for a normalized world-space direction. Broad sky
+// features provide visible reflections without a tiny, noisy sun emitter.
+// This is a procedural environment, not a physical atmosphere simulation.
+vec3 environmentRadiance(vec3 direction) {
+  float elevation = clamp(direction.y, 0.0, 1.0);
+  vec3 horizon = vec3(1.25, 1.35, 1.5);
+  vec3 zenith = vec3(0.28, 0.55, 1.0);
+  vec3 sky = mix(horizon, zenith, pow(elevation, 0.55));
 
-  Hit shadowHit;
-  if (!intersectScene(shadowRay, shadowHit)) {
-    return true;
-  }
+  // Smooth cloud patches vary with direction so a flat water surface has
+  // recognizable reflected features. Keep them static for accumulation.
+  float cloudA = pow(max(dot(direction, normalize(vec3(-0.7, 0.65, -0.3))), 0.0), 12.0);
+  float cloudB = pow(max(dot(direction, normalize(vec3(0.55, 0.45, 0.7))), 0.0), 20.0);
+  float clouds = smoothstep(0.15, 0.8, max(cloudA, cloudB));
+  sky = mix(sky, vec3(2.2, 2.15, 2.05), clouds);
 
-  // Visible when the first hit is the sampled light, or no blocker appears
-  // before the sampled light distance.
-  if (length(shadowHit.emission) > 0.0 && shadowHit.t <= lightDist + EPS) {
-    return true;
-  }
-
-  return shadowHit.t >= lightDist - EPS;
-}
-
-vec3 sampleAreaLight(Hit hit, inout uint rngState) {
-  vec2 r = rand2(rngState);
-  vec3 lightPos = vec3(
-    mix(LIGHT_X_RANGE.x, LIGHT_X_RANGE.y, r.x),
-    LIGHT_CENTER.y,
-    mix(LIGHT_Z_RANGE.x, LIGHT_Z_RANGE.y, r.y)
-  );
-
-  vec3 toLight = lightPos - hit.pos;
-  float dist2 = dot(toLight, toLight);
-  float dist = sqrt(dist2);
-  vec3 lightDir = toLight / max(dist, EPS);
-
-  float cosSurface = max(dot(hit.normal, lightDir), 0.0);
-  float cosLight = max(dot(LIGHT_NORMAL, -lightDir), 0.0);
-  if (cosSurface <= 0.0 || cosLight <= 0.0) {
-    return vec3(0.0);
-  }
-
-  vec3 shadowOrigin = hit.pos + hit.normal * EPS;
-  if (!visibleToLight(shadowOrigin, lightDir, dist)) {
-    return vec3(0.0);
-  }
-
-  return hit.albedo / PI * LIGHT_EMISSION * cosSurface * cosLight / dist2 * LIGHT_AREA;
+  // Ground geometry normally blocks the lower hemisphere; retain a finite
+  // neutral value at the horizon and for any downward escaping rays.
+  return mix(vec3(0.12, 0.1, 0.08), sky, smoothstep(-0.08, 0.02, direction.y));
 }
 
 mat3 tangentBasis(vec3 normal) {
@@ -409,9 +384,10 @@ Ray makeCameraRay(vec2 sampleUv) {
   screen.x *= u_resolution.x / max(u_resolution.y, 1.0);
 
   float yaw = mix(-0.5, 0.5, u_mouse.x);
-  float pitch = mix(-0.18, 0.18, u_mouse.y);
+  // Keep the orbit above the ground so the shallow water surface stays visible.
+  float pitch = mix(0.45, 0.9, u_mouse.y);
 
-  vec3 target = vec3(0.0, 0.9, -0.75 + u_cameraZOffset);
+  vec3 target = vec3(0.0, 0.0, -0.2 + u_cameraZOffset) + u_cameraOffset;
   float camDist = 3.3;
   vec3 camPos = target + vec3(
     sin(yaw) * cos(pitch),
@@ -430,20 +406,15 @@ Ray makeCameraRay(vec2 sampleUv) {
 vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
   vec3 radiance = vec3(0.0);
   vec3 throughput = vec3(1.0);
-  bool allowEmitterHit = true;
 
   for (int bounce = 0; bounce < MAX_BOUNCES; ++bounce) {
     rngState ^= makeSeed(pixel, sampleIndex, bounce);
 
     Hit hit;
     if (!intersectScene(ray, hit)) {
-      break;
-    }
-
-    if (length(hit.emission) > 0.0) {
-      if (allowEmitterHit) {
-        radiance += throughput * hit.emission;
-      }
+      // Every escaping path samples the environment, including diffuse bounces.
+      // There is no separate light sampler, so this does not double-count it.
+      radiance += throughput * environmentRadiance(ray.dir);
       break;
     }
 
@@ -456,11 +427,8 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
       vec3 offsetNormal = dot(nextDir, hit.normal) > 0.0 ? hit.normal : -hit.normal;
       ray.origin = hit.pos + offsetNormal * EPS;
       ray.dir = normalize(nextDir);
-      allowEmitterHit = true;
       continue;
     }
-
-    radiance += throughput * sampleAreaLight(hit, rngState);
 
     if (!surviveRussianRoulette(bounce, throughput, rngState)) {
       break;
@@ -471,7 +439,6 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
 
     ray.origin = hit.pos + hit.normal * EPS;
     ray.dir = nextDir;
-    allowEmitterHit = false;
   }
 
   return radiance;

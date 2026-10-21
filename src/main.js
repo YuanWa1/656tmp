@@ -10,6 +10,7 @@ import { compileShader, linkProgram } from "./webgl-utils.js";
 const CAMERA_Z_SCROLL_SPEED = 0.002;
 const CAMERA_Z_MIN = -2.5;
 const CAMERA_Z_MAX = 2.0;
+const CAMERA_MOVE_SPEED = 1.2;
 
 function initGL() {
   const canvas = document.querySelector("#glcanvas");
@@ -152,6 +153,10 @@ async function main() {
   let readTargetIndex = 0;
   let accumulationTargets = [];
   let cameraZOffset = 0;
+  const cameraOffset = [0, 0, 0];
+  const pressedKeys = new Set();
+  const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"]);
+  let previousFrameTime = performance.now();
   const startTime = performance.now();
 
   function resetAccumulation() {
@@ -179,6 +184,22 @@ async function main() {
   }
 
   canvas.addEventListener("mousemove", setMousePosition);
+  // Scope shortcuts to the canvas so typing or operating other page controls
+  // does not move the camera. Clear held keys when focus leaves the viewer.
+  canvas.tabIndex = 0;
+  canvas.setAttribute("aria-label", "Path tracer. WASD: move horizontally. Q: down. E: up.");
+  canvas.addEventListener("pointerdown", () => canvas.focus({ preventScroll: true }));
+  canvas.addEventListener("keydown", (event) => {
+    if (!movementKeys.has(event.code) || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    pressedKeys.add(event.code);
+  });
+  window.addEventListener("keyup", (event) => pressedKeys.delete(event.code));
+  canvas.addEventListener("blur", () => pressedKeys.clear());
+  window.addEventListener("blur", () => pressedKeys.clear());
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pressedKeys.clear();
+  });
   canvas.addEventListener("wheel", (event) => {
     event.preventDefault();
 
@@ -194,7 +215,28 @@ async function main() {
     }
   }, { passive: false });
 
-  function frame() {
+  // Translate the camera and its orbit target together. WASD follows the
+  // current yaw on the ground plane; QE remains aligned with world up.
+  function updateCamera(deltaSeconds) {
+    const forward = Number(pressedKeys.has("KeyW")) - Number(pressedKeys.has("KeyS"));
+    const right = Number(pressedKeys.has("KeyD")) - Number(pressedKeys.has("KeyA"));
+    const up = Number(pressedKeys.has("KeyE")) - Number(pressedKeys.has("KeyQ"));
+    const length = Math.hypot(forward, right, up);
+    if (length === 0) return;
+
+    // Match makeCameraRay's yaw; normalize input to avoid faster diagonal motion.
+    const yaw = -0.5 + mouseX / Math.max(canvas.width, 1);
+    const step = CAMERA_MOVE_SPEED * deltaSeconds / length;
+    cameraOffset[0] += (-Math.sin(yaw) * forward + Math.cos(yaw) * right) * step;
+    cameraOffset[1] += up * step;
+    cameraOffset[2] += (-Math.cos(yaw) * forward - Math.sin(yaw) * right) * step;
+    resetAccumulation();
+  }
+
+  function frame(now) {
+    // Bound elapsed time after a stalled/background frame to prevent large jumps.
+    const deltaSeconds = Math.min(Math.max((now - previousFrameTime) * 0.001, 0), 0.05);
+    previousFrameTime = now;
     const resized = resizeCanvasToDisplaySize(canvas);
     if (resized || accumulationTargets.length === 0) {
       deleteAccumulationTargets(gl, accumulationTargets);
@@ -202,6 +244,7 @@ async function main() {
       resetAccumulation();
     }
 
+    updateCamera(deltaSeconds);
     const readTarget = accumulationTargets[readTargetIndex];
     const writeTarget = accumulationTargets[1 - readTargetIndex];
 
@@ -210,6 +253,7 @@ async function main() {
       u_previousFrame: { type: "1i", value: 0 },
       u_frame: { type: "1i", value: frameIndex },
       u_cameraZOffset: { type: "1f", value: cameraZOffset },
+      u_cameraOffset: { type: "3f", value: cameraOffset },
       u_mouse: {
         type: "2f",
         value: [
