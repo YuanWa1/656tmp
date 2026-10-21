@@ -23,6 +23,11 @@ const float EPS = 0.001;
 const int MAT_DIFFUSE = 0;
 const int MAT_DIELECTRIC = 1;
 const float WATER_IOR = 1.333;
+const float OIL_IOR = 1.46;
+// Nanometers, like the wavelengths below. Spatial variation is static so
+// progressive accumulation converges rather than mixing moving film patterns.
+const float FILM_THICKNESS_NM = 450.0;
+const float FILM_VARIATION_NM = 250.0;
 const int RUSSIAN_ROULETTE_START = 3;
 const float RUSSIAN_ROULETTE_SURVIVAL = 0.95;
 
@@ -333,28 +338,74 @@ vec3 cosineWeightedHemisphere(vec3 normal, inout uint rngState) {
   return normalize(tangentBasis(normal) * localDir);
 }
 
-float fresnelSchlick(float cosTheta, float etaI, float etaT) {
-  float r0 = (etaI - etaT) / (etaI + etaT);
-  r0 *= r0;
-  return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
+float filmThicknessNm(vec3 position) {
+  vec2 p = position.xz;
+  float pattern = sin(3.2 * p.x + 1.5 * sin(2.7 * p.y))
+                * cos(2.4 * p.y - 0.8 * p.x);
+  return max(0.0, FILM_THICKNESS_NM + FILM_VARIATION_NM * pattern);
 }
 
-vec3 sampleDielectric(Hit hit, Ray ray, inout uint rngState) {
+// Airy reflectance sums all internal reflections of a lossless parallel film.
+// Signed amplitude coefficients retain interface phase flips (including the
+// p-polarization sign change); squaring them too early loses interference.
+vec3 airyReflectance(float r01, float r12, vec3 cosPhase) {
+  float product = r01 * r12;
+  return (vec3(r01 * r01 + r12 * r12) + 2.0 * product * cosPhase)
+       / max(vec3(1.0 + product * product) + 2.0 * product * cosPhase, vec3(1e-7));
+}
+
+// Returns approximate RGB power reflectance for air/oil/water or the reversed
+// stack. Three representative wavelengths are a prototype approximation,
+// not spectral integration into a color-matching space. IORs are nondispersive.
+vec3 thinFilmReflectance(float cosI, float n0, float n2, float thicknessNm) {
+  float sin2I = max(0.0, 1.0 - cosI * cosI);
+  float sin2Film = (n0 / OIL_IOR) * (n0 / OIL_IOR) * sin2I;
+  float sin2Exit = (n0 / n2) * (n0 / n2) * sin2I;
+  // OIL_IOR exceeds both air and water IOR, so the film has no evanescent
+  // propagation here. If the exit medium cannot transmit, all power reflects.
+  if (sin2Exit >= 1.0 || cosI <= 1e-6) return vec3(1.0);
+  float cosFilm = sqrt(max(0.0, 1.0 - sin2Film));
+  float cosExit = sqrt(max(0.0, 1.0 - sin2Exit));
+  float rs01 = (n0 * cosI - OIL_IOR * cosFilm) / (n0 * cosI + OIL_IOR * cosFilm);
+  float rs12 = (OIL_IOR * cosFilm - n2 * cosExit) / (OIL_IOR * cosFilm + n2 * cosExit);
+  float rp01 = (OIL_IOR * cosI - n0 * cosFilm) / (OIL_IOR * cosI + n0 * cosFilm);
+  float rp12 = (n2 * cosFilm - OIL_IOR * cosExit) / (n2 * cosFilm + OIL_IOR * cosExit);
+  vec3 wavelengthsNm = vec3(650.0, 550.0, 450.0);
+  vec3 cosPhase = cos(4.0 * PI * OIL_IOR * thicknessNm * cosFilm / wavelengthsNm);
+  return clamp(0.5 * (airyReflectance(rs01, rs12, cosPhase)
+                   + airyReflectance(rp01, rp12, cosPhase)), 0.0, 1.0);
+}
+
+// Samples a smooth coated interface and returns its Monte Carlo RGB weight.
+// The nanometer film is evaluated optically, without extra geometric surfaces.
+vec3 sampleDielectric(Hit hit, Ray ray, inout uint rngState, out vec3 weight) {
   bool frontFace = dot(ray.dir, hit.normal) < 0.0;
   vec3 normal = frontFace ? hit.normal : -hit.normal;
   float etaI = frontFace ? 1.0 : hit.ior;
   float etaT = frontFace ? hit.ior : 1.0;
   float eta = etaI / etaT;
-
-  float cosTheta = min(dot(-ray.dir, normal), 1.0);
+  float cosTheta = clamp(dot(-ray.dir, normal), 0.0, 1.0);
   float sin2Theta = max(0.0, 1.0 - cosTheta * cosTheta);
-  bool cannotRefract = eta * eta * sin2Theta > 1.0;
-  float fresnel = fresnelSchlick(cosTheta, etaI, etaT);
-
-  if (cannotRefract || rand(rngState) < fresnel) {
+  if (eta * eta * sin2Theta >= 1.0) {
+    weight = vec3(1.0);
     return reflect(ray.dir, normal);
   }
 
+  vec3 reflection = thinFilmReflectance(cosTheta, etaI, etaT, filmThicknessNm(hit.pos));
+  float probability = dot(reflection, vec3(1.0 / 3.0));
+  if (probability >= 1.0) {
+    weight = vec3(1.0);
+    return reflect(ray.dir, normal);
+  }
+  if (probability > 0.0 && rand(rngState) < probability) {
+    // A single direction is shared by RGB; divide by the scalar branch PDF.
+    weight = reflection / probability;
+    return reflect(ray.dir, normal);
+  }
+
+  // Lossless transmission is 1-R. eta^2 converts radiance across media;
+  // entry/exit factors cancel for a path that returns to the original medium.
+  weight = (vec3(1.0) - reflection) * (eta * eta) / (1.0 - probability);
   return refract(ray.dir, normal, eta);
 }
 
@@ -423,7 +474,9 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
         break;
       }
 
-      vec3 nextDir = sampleDielectric(hit, ray, rngState);
+      vec3 weight;
+      vec3 nextDir = sampleDielectric(hit, ray, rngState, weight);
+      throughput *= weight;
       vec3 offsetNormal = dot(nextDir, hit.normal) > 0.0 ? hit.normal : -hit.normal;
       ray.origin = hit.pos + offsetNormal * EPS;
       ray.dir = normalize(nextDir);
