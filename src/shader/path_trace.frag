@@ -14,7 +14,7 @@ uniform float u_time;
 
 out vec4 outColor;
 
-const int SAMPLES = 2;
+const int SAMPLES = 8;
 const int MAX_BOUNCES = 18;
 
 const float PI = 3.14159265359;
@@ -22,12 +22,12 @@ const float INF = 1e20;
 const float EPS = 0.001;
 const int MAT_DIFFUSE = 0;
 const int MAT_DIELECTRIC = 1;
-const float WATER_IOR = 1.333;
-const float OIL_IOR = 1.46;
+const float FILM_IOR = 1.333; // Soap solution between air on both sides.
 // Nanometers, like the wavelengths below. Spatial variation is static so
 // progressive accumulation converges rather than mixing moving film patterns.
 const float FILM_THICKNESS_NM = 450.0;
 const float FILM_VARIATION_NM = 250.0;
+const float FILM_NOISE_SCALE = 1.0;
 const int RUSSIAN_ROULETTE_START = 3;
 const float RUSSIAN_ROULETTE_SURVIVAL = 0.95;
 
@@ -44,6 +44,7 @@ struct Hit {
   vec3 emission;
   int material;
   float ior;
+  vec3 filmPosition;
 };
 
 void initHit(out Hit hit) {
@@ -54,6 +55,7 @@ void initHit(out Hit hit) {
   hit.emission = vec3(0.0);
   hit.material = MAT_DIFFUSE;
   hit.ior = 1.0;
+  hit.filmPosition = vec3(0.0);
 }
 
 bool isCloser(float t, Hit hit) {
@@ -138,6 +140,8 @@ void intersectSphere(
   commitHit(hit, t, pos, normal, albedo, vec3(0.0));
   hit.material = material;
   hit.ior = ior;
+  // Object-local coordinates keep the film attached to the spherical shell.
+  hit.filmPosition = normal + center * 2.7;
 }
 
 void intersectPlaneRect(
@@ -173,148 +177,31 @@ void intersectPlaneRect(
   commitHit(hit, t, pos, faceNormal, albedo, emission);
 }
 
-void intersectTriangle(
-  Ray ray,
-  vec3 v0,
-  vec3 v1,
-  vec3 v2,
-  vec3 albedo,
-  int material,
-  float ior,
-  inout Hit hit
-) {
-  vec3 edge1 = v1 - v0;
-  vec3 edge2 = v2 - v0;
-  vec3 pvec = cross(ray.dir, edge2);
-  float det = dot(edge1, pvec);
-
-  if (abs(det) < 1e-6) {
-    return;
-  }
-
-  float invDet = 1.0 / det;
-  vec3 tvec = ray.origin - v0;
-  float u = dot(tvec, pvec) * invDet;
-  if (u < 0.0 || u > 1.0) {
-    return;
-  }
-
-  vec3 qvec = cross(tvec, edge1);
-  float v = dot(ray.dir, qvec) * invDet;
-  if (v < 0.0 || u + v > 1.0) {
-    return;
-  }
-
-  float t = dot(edge2, qvec) * invDet;
-  if (!isCloser(t, hit)) {
-    return;
-  }
-
-  vec3 pos = ray.origin + t * ray.dir;
-  vec3 normal = normalize(cross(edge1, edge2));
-  vec3 faceNormal = dot(ray.dir, normal) < 0.0 ? normal : -normal;
-  commitHit(hit, t, pos, faceNormal, albedo, vec3(0.0));
-  hit.material = material;
-  hit.ior = ior;
-}
-
-void intersectPyramid(
-  Ray ray,
-  vec3 baseCenter,
-  float halfX,
-  float halfZ,
-  float height,
-  vec3 albedo,
-  int material,
-  float ior,
-  inout Hit hit
-) {
-  vec3 p0 = baseCenter + vec3(-halfX, 0.0, -halfZ);
-  vec3 p1 = baseCenter + vec3( halfX, 0.0, -halfZ);
-  vec3 p2 = baseCenter + vec3( halfX, 0.0,  halfZ);
-  vec3 p3 = baseCenter + vec3(-halfX, 0.0,  halfZ);
-  vec3 apex = baseCenter + vec3(0.0, height, 0.0);
-
-  // Four side faces.
-  intersectTriangle(ray, p0, p1, apex, albedo, material, ior, hit);
-  intersectTriangle(ray, p1, p2, apex, albedo, material, ior, hit);
-  intersectTriangle(ray, p2, p3, apex, albedo, material, ior, hit);
-  intersectTriangle(ray, p3, p0, apex, albedo, material, ior, hit);
-
-  // Thin bottom, lifted slightly above the floor to avoid coplanar hits.
-  intersectTriangle(ray, p0, p2, p1, albedo, material, ior, hit);
-  intersectTriangle(ray, p0, p3, p2, albedo, material, ior, hit);
-}
-
-// A flat water interface closes the lower half of an ellipsoidal depression.
-// Sharing its rim with the dry ground avoids floating water and open side walls.
-void intersectPuddleGround(Ray ray, inout Hit hit) {
-  vec3 center = vec3(0.0, 0.0, -0.2);
-  vec3 radii = vec3(1.25, 0.08, 0.85);
-  vec3 groundColor = vec3(0.24, 0.22, 0.19);
-
-  if (abs(ray.dir.y) > 1e-5) {
-    float t = -ray.origin.y / ray.dir.y;
-    if (isCloser(t, hit)) {
-      vec3 pos = ray.origin + t * ray.dir;
-      vec2 footprint = (pos.xz - center.xz) / radii.xz;
-      bool water = dot(footprint, footprint) < 1.0;
-      // Keep the water normal outward even for rays exiting from below;
-      // sampleDielectric uses its orientation to choose the two media.
-      vec3 normal = vec3(0.0, 1.0, 0.0);
-      commitHit(hit, t, pos, normal, groundColor, vec3(0.0));
-      if (water) {
-        hit.material = MAT_DIELECTRIC;
-        hit.ior = WATER_IOR;
-      }
-    }
-  }
-
-  // Transform into a unit sphere without normalizing the direction, so t
-  // stays in world units. Only the lower hemisphere is the submerged bed.
-  vec3 origin = (ray.origin - center) / radii;
-  vec3 direction = ray.dir / radii;
-  float a = dot(direction, direction);
-  float b = dot(origin, direction);
-  float c = dot(origin, origin) - 1.0;
-  float discriminant = b * b - a * c;
-  if (discriminant < 0.0) return;
-  float root = sqrt(discriminant);
-  for (int i = 0; i < 2; ++i) {
-    float t = (-b + (i == 0 ? -root : root)) / a;
-    vec3 pos = ray.origin + t * ray.dir;
-    if (isCloser(t, hit) && pos.y < center.y) {
-      vec3 normal = -normalize((pos - center) / (radii * radii));
-      commitHit(hit, t, pos, normal, groundColor, vec3(0.0));
-    }
-  }
-}
-
 bool intersectScene(Ray ray, out Hit hit) {
   initHit(hit);
-  intersectPuddleGround(ray, hit);
+  // Each sphere is a zero-geometric-thickness soap shell, not a solid glass ball.
+  intersectSphere(ray, vec3(-0.95, 0.95, 0.0), 0.95, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
+  intersectSphere(ray, vec3(0.9, 0.66, 0.25), 0.66, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
+  intersectSphere(ray, vec3(0.35, 2.05, -0.65), 0.46, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
+
+  // Dark studio enclosure with large luminous side and ceiling panels.
+  // Black gaps preserve contrast instead of lighting every direction equally.
+  vec3 dark = vec3(0.006);
+  intersectPlaneRect(ray, vec3(0.0), vec3(0,1,0), vec2(-4), vec2(4), 0,2, dark, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(0,5,0), vec3(0,-1,0), vec2(-4), vec2(4), 0,2, dark, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(-4,0,0), vec3(1,0,0), vec2(0,-4), vec2(5,4), 1,2, dark, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(4,0,0), vec3(-1,0,0), vec2(0,-4), vec2(5,4), 1,2, dark, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(0,0,-4), vec3(0,0,1), vec2(-4,0), vec2(4,5), 0,1, dark, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(0,0,4), vec3(0,0,-1), vec2(-4,0), vec2(4,5), 0,1, dark, vec3(0), hit);
+  // Panels are slightly inside the walls to avoid coincident intersections.
+  intersectPlaneRect(ray, vec3(-3.98,0,0), vec3(1,0,0), vec2(1.4,-2.8), vec2(4.8,2.8), 1,2, vec3(0), vec3(7.0), hit);
+  intersectPlaneRect(ray, vec3(3.98,0,0), vec3(-1,0,0), vec2(2.0,-2.2), vec2(4.6,1.8), 1,2, vec3(0), vec3(5.0), hit);
+  intersectPlaneRect(ray, vec3(0,4.98,0), vec3(0,-1,0), vec2(-3.2,-3.0), vec2(3.2,2.0), 0,2, vec3(0), vec3(6.0), hit);
   return hit.t < INF;
 }
 
-// Returns linear radiance for a normalized world-space direction. Broad sky
-// features provide visible reflections without a tiny, noisy sun emitter.
-// This is a procedural environment, not a physical atmosphere simulation.
 vec3 environmentRadiance(vec3 direction) {
-  float elevation = clamp(direction.y, 0.0, 1.0);
-  vec3 horizon = vec3(1.25, 1.35, 1.5);
-  vec3 zenith = vec3(0.28, 0.55, 1.0);
-  vec3 sky = mix(horizon, zenith, pow(elevation, 0.55));
-
-  // Smooth cloud patches vary with direction so a flat water surface has
-  // recognizable reflected features. Keep them static for accumulation.
-  float cloudA = pow(max(dot(direction, normalize(vec3(-0.7, 0.65, -0.3))), 0.0), 12.0);
-  float cloudB = pow(max(dot(direction, normalize(vec3(0.55, 0.45, 0.7))), 0.0), 20.0);
-  float clouds = smoothstep(0.15, 0.8, max(cloudA, cloudB));
-  sky = mix(sky, vec3(2.2, 2.15, 2.05), clouds);
-
-  // Ground geometry normally blocks the lower hemisphere; retain a finite
-  // neutral value at the horizon and for any downward escaping rays.
-  return mix(vec3(0.12, 0.1, 0.08), sky, smoothstep(-0.08, 0.02, direction.y));
+  return vec3(0.0); // The studio panels provide all illumination.
 }
 
 mat3 tangentBasis(vec3 normal) {
@@ -338,11 +225,44 @@ vec3 cosineWeightedHemisphere(vec3 normal, inout uint rngState) {
   return normalize(tangentBasis(normal) * localDir);
 }
 
+// Stable lattice gradients depend only on position, never the path RNG or frame.
+vec2 filmNoiseGradient(ivec2 cell) {
+  uint seed = hashUint(uint(cell.x) * 1973u ^ uint(cell.y) * 9277u);
+  float angle = float(seed & 0x00ffffffu) * (2.0 * PI / 16777216.0);
+  return vec2(cos(angle), sin(angle));
+}
+
+// 2D Perlin gradient noise: quintic interpolation keeps derivatives continuous
+// across cell boundaries, avoiding grid seams in the thin-film colors.
+float filmPerlinNoise(vec2 p) {
+  ivec2 cell = ivec2(floor(p));
+  vec2 f = fract(p);
+  vec2 fade = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float n00 = dot(filmNoiseGradient(cell), f);
+  float n10 = dot(filmNoiseGradient(cell + ivec2(1, 0)), f - vec2(1.0, 0.0));
+  float n01 = dot(filmNoiseGradient(cell + ivec2(0, 1)), f - vec2(0.0, 1.0));
+  float n11 = dot(filmNoiseGradient(cell + ivec2(1, 1)), f - vec2(1.0, 1.0));
+  return mix(mix(n00, n10, fade.x), mix(n01, n11, fade.x), fade.y);
+}
+
 float filmThicknessNm(vec3 position) {
-  vec2 p = position.xz;
-  float pattern = sin(3.2 * p.x + 1.5 * sin(2.7 * p.y))
-                * cos(2.4 * p.y - 0.8 * p.x);
-  return max(0.0, FILM_THICKNESS_NM + FILM_VARIATION_NM * pattern);
+  // Blend three Perlin projections for a continuous volume field: no UV seam
+  // or pole singularity. Domain warping produces irregular flowing film bands.
+  vec3 p = position * FILM_NOISE_SCALE;
+  p += 0.65 * vec3(filmPerlinNoise(p.yz + 7.1),
+                   filmPerlinNoise(p.zx + 13.4), filmPerlinNoise(p.xy + 2.6));
+  float noise = 0.0;
+  float amplitude = 1.0;
+  float amplitudeSum = 0.0;
+  for (int octave = 0; octave < 5; ++octave) {
+    noise += amplitude * (filmPerlinNoise(p.xy) + filmPerlinNoise(p.yz)
+                        + filmPerlinNoise(p.zx)) / 3.0;
+    amplitudeSum += amplitude;
+    p = p.yzx * 2.03 + vec3(17.1, 9.2, 5.7);
+    amplitude *= 0.5;
+  }
+  float pattern = clamp(3.5 * noise / amplitudeSum, -1.0, 1.0);
+  return FILM_THICKNESS_NM + FILM_VARIATION_NM * pattern;
 }
 
 // Airy reflectance sums all internal reflections of a lossless parallel film.
@@ -354,30 +274,32 @@ vec3 airyReflectance(float r01, float r12, vec3 cosPhase) {
        / max(vec3(1.0 + product * product) + 2.0 * product * cosPhase, vec3(1e-7));
 }
 
-// Returns approximate RGB power reflectance for air/oil/water or the reversed
+// Returns approximate RGB power reflectance for the air/soap-film/air
 // stack. Three representative wavelengths are a prototype approximation,
 // not spectral integration into a color-matching space. IORs are nondispersive.
 vec3 thinFilmReflectance(float cosI, float n0, float n2, float thicknessNm) {
   float sin2I = max(0.0, 1.0 - cosI * cosI);
-  float sin2Film = (n0 / OIL_IOR) * (n0 / OIL_IOR) * sin2I;
+  float sin2Film = (n0 / FILM_IOR) * (n0 / FILM_IOR) * sin2I;
   float sin2Exit = (n0 / n2) * (n0 / n2) * sin2I;
-  // OIL_IOR exceeds both air and water IOR, so the film has no evanescent
+  // FILM_IOR exceeds the surrounding air IOR, so the film has no evanescent
   // propagation here. If the exit medium cannot transmit, all power reflects.
   if (sin2Exit >= 1.0 || cosI <= 1e-6) return vec3(1.0);
   float cosFilm = sqrt(max(0.0, 1.0 - sin2Film));
   float cosExit = sqrt(max(0.0, 1.0 - sin2Exit));
-  float rs01 = (n0 * cosI - OIL_IOR * cosFilm) / (n0 * cosI + OIL_IOR * cosFilm);
-  float rs12 = (OIL_IOR * cosFilm - n2 * cosExit) / (OIL_IOR * cosFilm + n2 * cosExit);
-  float rp01 = (OIL_IOR * cosI - n0 * cosFilm) / (OIL_IOR * cosI + n0 * cosFilm);
-  float rp12 = (n2 * cosFilm - OIL_IOR * cosExit) / (n2 * cosFilm + OIL_IOR * cosExit);
+  float rs01 = (n0 * cosI - FILM_IOR * cosFilm) / (n0 * cosI + FILM_IOR * cosFilm);
+  float rs12 = (FILM_IOR * cosFilm - n2 * cosExit) / (FILM_IOR * cosFilm + n2 * cosExit);
+  float rp01 = (FILM_IOR * cosI - n0 * cosFilm) / (FILM_IOR * cosI + n0 * cosFilm);
+  float rp12 = (n2 * cosFilm - FILM_IOR * cosExit) / (n2 * cosFilm + FILM_IOR * cosExit);
   vec3 wavelengthsNm = vec3(650.0, 550.0, 450.0);
-  vec3 cosPhase = cos(4.0 * PI * OIL_IOR * thicknessNm * cosFilm / wavelengthsNm);
+  vec3 cosPhase = cos(4.0 * PI * FILM_IOR * thicknessNm * cosFilm / wavelengthsNm);
   return clamp(0.5 * (airyReflectance(rs01, rs12, cosPhase)
                    + airyReflectance(rp01, rp12, cosPhase)), 0.0, 1.0);
 }
 
 // Samples a smooth coated interface and returns its Monte Carlo RGB weight.
 // The nanometer film is evaluated optically, without extra geometric surfaces.
+// Air exists on both sides (hit.ior = 1), so transmitted rays continue straight.
+// Crossing the back of a sphere samples its second, spatially distinct film patch.
 vec3 sampleDielectric(Hit hit, Ray ray, inout uint rngState, out vec3 weight) {
   bool frontFace = dot(ray.dir, hit.normal) < 0.0;
   vec3 normal = frontFace ? hit.normal : -hit.normal;
@@ -391,7 +313,7 @@ vec3 sampleDielectric(Hit hit, Ray ray, inout uint rngState, out vec3 weight) {
     return reflect(ray.dir, normal);
   }
 
-  vec3 reflection = thinFilmReflectance(cosTheta, etaI, etaT, filmThicknessNm(hit.pos));
+  vec3 reflection = thinFilmReflectance(cosTheta, etaI, etaT, filmThicknessNm(hit.filmPosition));
   float probability = dot(reflection, vec3(1.0 / 3.0));
   if (probability >= 1.0) {
     weight = vec3(1.0);
@@ -435,11 +357,11 @@ Ray makeCameraRay(vec2 sampleUv) {
   screen.x *= u_resolution.x / max(u_resolution.y, 1.0);
 
   float yaw = mix(-0.5, 0.5, u_mouse.x);
-  // Keep the orbit above the ground so the shallow water surface stays visible.
-  float pitch = mix(0.45, 0.9, u_mouse.y);
+  // A low studio view shows the curved shells while keeping the floor visible.
+  float pitch = mix(0.1, 0.38, u_mouse.y);
 
-  vec3 target = vec3(0.0, 0.0, -0.2 + u_cameraZOffset) + u_cameraOffset;
-  float camDist = 3.3;
+  vec3 target = vec3(0.0, 0.85, -0.2 + u_cameraZOffset) + u_cameraOffset;
+  float camDist = 3.7;
   vec3 camPos = target + vec3(
     sin(yaw) * cos(pitch),
     sin(pitch) * 0.9,
@@ -450,7 +372,7 @@ Ray makeCameraRay(vec2 sampleUv) {
 
   Ray ray;
   ray.origin = camPos;
-  ray.dir = normalize(cam * vec3(screen, 1.85));
+  ray.dir = normalize(cam * vec3(screen, 1.55));
   return ray;
 }
 
@@ -466,6 +388,13 @@ vec3 tracePath(Ray ray, ivec2 pixel, int sampleIndex, inout uint rngState) {
       // Every escaping path samples the environment, including diffuse bounces.
       // There is no separate light sampler, so this does not double-count it.
       radiance += throughput * environmentRadiance(ray.dir);
+      break;
+    }
+
+    // Panel hits are the only light source; no separate direct-light sampler
+    // is used, so adding emission here does not double-count lighting.
+    if (max(hit.emission.r, max(hit.emission.g, hit.emission.b)) > 0.0) {
+      radiance += throughput * hit.emission;
       break;
     }
 

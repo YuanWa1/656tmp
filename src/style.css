@@ -369,3 +369,5 @@ input[type="range"]::-moz-range-thumb {
     width: min(82vw, 640px);
   }
 }
+
+.content__description { grid-column: 1 / -1; }

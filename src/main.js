@@ -147,8 +147,8 @@ async function main() {
 
   const geometry = createFullscreenQuad(gl, material.program);
 
-  let mouseX = canvas.width;
-  let mouseY = canvas.height;
+  let mouseX = canvas.width * 0.5;
+  let mouseY = canvas.height * 0.5;
   let frameIndex = 0;
   let readTargetIndex = 0;
   let accumulationTargets = [];
@@ -215,7 +215,7 @@ async function main() {
     }
   }, { passive: false });
 
-  // Translate the camera and its orbit target together. WASD follows the
+  // Translate the camera and its look-at target together. WASD follows the
   // current yaw on the ground plane; QE remains aligned with world up.
   function updateCamera(deltaSeconds) {
     const forward = Number(pressedKeys.has("KeyW")) - Number(pressedKeys.has("KeyS"));
@@ -237,7 +237,14 @@ async function main() {
     // Bound elapsed time after a stalled/background frame to prevent large jumps.
     const deltaSeconds = Math.min(Math.max((now - previousFrameTime) * 0.001, 0), 0.05);
     previousFrameTime = now;
+    const previousWidth = canvas.width;
+    const previousHeight = canvas.height;
     const resized = resizeCanvasToDisplaySize(canvas);
+    if (resized) {
+      // Preserve the normalized camera pose across initial sizing and resizes.
+      mouseX *= canvas.width / Math.max(previousWidth, 1);
+      mouseY *= canvas.height / Math.max(previousHeight, 1);
+    }
     if (resized || accumulationTargets.length === 0) {
       deleteAccumulationTargets(gl, accumulationTargets);
       accumulationTargets = createAccumulationTargets(gl, gl.canvas.width, gl.canvas.height);
