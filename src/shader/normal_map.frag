@@ -154,7 +154,7 @@ vec3 environment(vec3 dir) {
 struct Shading {
   vec3 diffuse;
   vec3 specular;
-  vec3 film;       // iridescent film reflectance at the view angle (debug)
+  vec3 film;       // film reflectance for the light, at angle acos(H·L) (debug)
   vec3 color;
 };
 
@@ -191,27 +191,28 @@ void shadeBubble(vec2 p, Shading background, inout Shading s) {
   float nDotV = max(dot(n, V), 0.0);
   vec3 filmView = thinFilmReflectance(nDotV, thickness);
 
-  // Mirror reflection of the environment, plus a broad glow from the light
-  // that slides across the bubble as the light moves.
-  vec3 r = reflect(-V, n);
-  vec3 reflected = environment(r)
-                 + light.radiance * 0.8 * pow(max(dot(r, light.L), 0.0), 12.0);
+  // Mirror reflection of the fixed environment. Light leaving a mirror toward
+  // the eye arrives at the view angle, so this term uses filmView (N·V).
+  vec3 envReflection = filmView * environment(reflect(-V, n));
 
-  // Sharp highlight: microfacet Blinn-Phong whose Fresnel term is the film's
-  // own reflectance at the half-vector angle, so the highlight is tinted too.
+  // Light reflects off microfacets oriented along the half vector H, so its
+  // true angle of incidence on the film is acos(H·L). That angle changes as
+  // the light moves, and with it the interference color of both lobes.
   vec3 h = normalize(light.L + V);
   float nDotL = max(dot(n, light.L), 0.0);
   float nDotH = max(dot(n, h), 0.0);
   vec3 filmHalf = thinFilmReflectance(max(dot(h, light.L), 0.0), thickness);
   float terminator = smoothstep(0.0, 0.15, nDotL);
+  // Broad glossy sheen (film micro-ripples) plus a sharp mirror-like highlight.
+  float sheen = 0.8 * pow(nDotH, 48.0);
   float normalization = (u_shininess + 8.0) / (8.0 * PI);
-  vec3 highlight = filmHalf * normalization * pow(nDotH, u_shininess)
-                 * u_specularStrength * light.radiance * terminator;
+  float sharp = normalization * pow(nDotH, u_shininess) * u_specularStrength;
+  vec3 lightReflection = filmHalf * (sheen + sharp) * light.radiance * terminator;
 
   // Lossless film: whatever is not reflected is transmitted straight through.
   s.diffuse = background.diffuse * (1.0 - filmView);
-  s.specular = filmView * reflected + highlight;
-  s.film = filmView;
+  s.specular = envReflection + lightReflection;
+  s.film = filmHalf;
   s.color = background.color * (1.0 - filmView) + s.specular;
 }
 
