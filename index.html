@@ -9,8 +9,71 @@
     <div class="page">
       <main class="stage">
         <section class="stage__frame">
+          <div class="mode-switch" role="radiogroup" aria-label="Renderer">
+            <label class="mode-switch__option">
+              <input type="radio" name="mode" value="normal" checked />
+              <span>Normal map</span>
+            </label>
+            <label class="mode-switch__option">
+              <input type="radio" name="mode" value="path" />
+              <span>Path tracer</span>
+            </label>
+          </div>
+
           <canvas id="glcanvas" width="640" height="640"></canvas>
-          <p>Click the view to move: W/S forward/back, A/D left/right, Q down, E up. Drag mouse to rotate.</p>
+          <p class="hint" data-mode="normal">Fixed view. Move the mouse over the image to move the light.</p>
+          <p class="hint" data-mode="path" hidden>Click the view to move: W/S forward/back, A/D left/right, Q down, E up. Drag mouse to rotate.</p>
+
+          <div class="panel nm-controls" data-mode="normal">
+            <div class="control">
+              <span class="control__label">View</span>
+              <select id="nm-view">
+                <option value="0">Shaded (ambient + diffuse + specular + film)</option>
+                <option value="2">Diffuse term only</option>
+                <option value="3">Specular term only (incl. film reflection)</option>
+                <option value="4">Film reflectance at view angle (×5)</option>
+                <option value="1">Decoded normals</option>
+              </select>
+            </div>
+            <label class="control">
+              <span class="control__label">Light height <output id="nm-height-out"></output></span>
+              <input id="nm-height" type="range" min="0.05" max="1.5" step="0.01" value="0.45" />
+            </label>
+            <label class="control">
+              <span class="control__label">Light intensity <output id="nm-intensity-out"></output></span>
+              <input id="nm-intensity" type="range" min="0.5" max="12" step="0.1" value="4" />
+            </label>
+            <label class="control">
+              <span class="control__label">Specular strength <output id="nm-spec-out"></output></span>
+              <input id="nm-spec" type="range" min="0" max="4" step="0.05" value="1.5" />
+            </label>
+            <label class="control">
+              <span class="control__label">Shininess <output id="nm-shininess-out"></output></span>
+              <input id="nm-shininess" type="range" min="8" max="512" step="1" value="160" />
+            </label>
+            <label class="control">
+              <span class="control__label">Ambient <output id="nm-ambient-out"></output></span>
+              <input id="nm-ambient" type="range" min="0" max="0.3" step="0.005" value="0.06" />
+            </label>
+            <label class="control">
+              <span class="control__label">Environment reflection <output id="nm-reflection-out"></output></span>
+              <input id="nm-reflection" type="range" min="0" max="3" step="0.05" value="1.4" />
+            </label>
+            <label class="control">
+              <span class="control__label">Film thickness offset (nm) <output id="nm-film-out"></output></span>
+              <input id="nm-film" type="range" min="-250" max="250" step="5" value="0" />
+            </label>
+            <label class="toggle">
+              <input id="nm-orbit" type="checkbox" />
+              <span class="toggle__track"></span>
+              <span>Auto-orbit light</span>
+            </label>
+            <label class="toggle">
+              <input id="nm-flip" type="checkbox" />
+              <span class="toggle__track"></span>
+              <span>Flip green channel (DirectX-style map)</span>
+            </label>
+          </div>
         </section>
 
         <section class="stage__content">
@@ -20,6 +83,21 @@
               <source src="proj6_demo.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
+          </div>
+
+          <div class="content__description" data-mode="normal">
+            <h2>Normal-map mode</h2>
+            <p>
+              The same scene seen from one fixed camera, with no geometry: every pixel's surface comes from a normal map baked from the path tracer's scene
+              (<code>scripts/bake_normal_map.py</code>). Normals are decoded with <code>N = normalize(tex * 2.0 - 1.0)</code>; the renormalization undoes
+              the shortening caused by texture filtering. A point light follows the mouse at an adjustable height above the image.
+            </p>
+            <p>
+              Walls and floor use Lambert diffuse plus a faint Fresnel-weighted Blinn-Phong highlight. Bubbles transmit the background
+              (a second normal map plus an albedo map describe the surface behind them) and reflect the light and a soft environment through the same
+              Airy thin-film reflectance as the path tracer, so both the broad reflection and the sharp highlight carry interference colors.
+              Film thickness is a static noise field, thinner toward the top of each bubble, so the colors stay stable as the light moves.
+            </p>
           </div>
 
           <div class="content__description">

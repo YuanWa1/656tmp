@@ -3,9 +3,10 @@ import "./style.css";
 import vertexShaderSource from "./shader/basic.vert?raw";
 import fragmentShaderSource from "./shader/path_trace.frag?raw";
 import displayShaderSource from "./shader/display.frag?raw";
+import normalMapShaderSource from "./shader/normal_map.frag?raw";
 
 import { render } from "./renderer.js";
-import { compileShader, linkProgram } from "./webgl-utils.js";
+import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
 
 const CAMERA_Z_SCROLL_SPEED = 0.002;
 const CAMERA_Z_MIN = -2.5;
@@ -115,6 +116,75 @@ function deleteAccumulationTargets(gl, targets) {
   }
 }
 
+const NORMAL_MAP_DIR = `${import.meta.env.BASE_URL}normalmap/`;
+
+async function loadImage(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to load ${url}: ${response.status}`);
+  }
+  // Flip so row 0 of the PNG (top) lands at v = 1, matching uv in basic.vert.
+  // No premultiply / color conversion: normal maps store data, not color.
+  return createImageBitmap(await response.blob(), {
+    imageOrientation: "flipY",
+    premultiplyAlpha: "none",
+    colorSpaceConversion: "none",
+  });
+}
+
+// Normal maps and masks are linear data; albedo is sRGB color.
+async function loadNormalMapScene(gl) {
+  const [normal, normalBack, albedo, mask] = await Promise.all(
+    ["normal.png", "normal_back.png", "albedo.png", "mask.png"].map((name) =>
+      loadImage(`${NORMAL_MAP_DIR}${name}`),
+    ),
+  );
+  const options = { generateMipmaps: false };
+  return {
+    normal: createTexture2D(gl, normal, { ...options, isLinear: true }),
+    normalBack: createTexture2D(gl, normalBack, { ...options, isLinear: true }),
+    albedo: createTexture2D(gl, albedo, { ...options, isLinear: false }),
+    mask: createTexture2D(gl, mask, { ...options, isLinear: true }),
+  };
+}
+
+function bindNormalMapControls() {
+  const read = (id) => document.getElementById(id);
+  const sliders = {
+    lightHeight: ["nm-height", 2],
+    lightIntensity: ["nm-intensity", 1],
+    specularStrength: ["nm-spec", 2],
+    shininess: ["nm-shininess", 0],
+    ambient: ["nm-ambient", 3],
+    filmOffsetNm: ["nm-film", 0],
+    reflection: ["nm-reflection", 2],
+  };
+  const params = { view: 0, flipGreen: false, orbit: false };
+
+  for (const [key, [id, digits]] of Object.entries(sliders)) {
+    const input = read(id);
+    const output = read(`${id}-out`);
+    const sync = () => {
+      params[key] = Number(input.value);
+      if (output) output.textContent = params[key].toFixed(digits);
+    };
+    input.addEventListener("input", sync);
+    sync();
+  }
+
+  const view = read("nm-view");
+  const syncView = () => { params.view = Number(view.value); };
+  view.addEventListener("change", syncView);
+  syncView();
+
+  const flip = read("nm-flip");
+  flip.addEventListener("change", () => { params.flipGreen = flip.checked; });
+  const orbit = read("nm-orbit");
+  orbit.addEventListener("change", () => { params.orbit = orbit.checked; });
+
+  return params;
+}
+
 function resizeCanvasToDisplaySize(canvas) {
   const pixelRatio = window.devicePixelRatio || 1;
   const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio));
@@ -138,12 +208,18 @@ async function main() {
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
   const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
   const displayFragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, displayShaderSource);
+  const normalMapFragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, normalMapShaderSource);
   const material = linkProgram(gl, vertexShader, fragmentShader);
   const displayMaterial = linkProgram(gl, vertexShader, displayFragmentShader);
+  const normalMapMaterial = linkProgram(gl, vertexShader, normalMapFragmentShader);
 
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
   gl.deleteShader(displayFragmentShader);
+  gl.deleteShader(normalMapFragmentShader);
+
+  const normalMapTextures = await loadNormalMapScene(gl);
+  const normalMapParams = bindNormalMapControls();
 
   const geometry = createFullscreenQuad(gl, material.program);
 
@@ -159,6 +235,27 @@ async function main() {
   let previousFrameTime = performance.now();
   const startTime = performance.now();
 
+  // "normal": fixed view, the mouse moves the light.
+  // "path": progressive path tracer, the mouse and keys move the camera.
+  let mode = "normal";
+  // Light position in uv space (origin bottom-left), upper left by default.
+  const lightUv = [0.3, 0.75];
+
+  function setMode(nextMode) {
+    mode = nextMode;
+    for (const element of document.querySelectorAll("[data-mode]")) {
+      element.hidden = element.dataset.mode !== mode;
+    }
+    pressedKeys.clear();
+    resetAccumulation();
+  }
+
+  for (const radio of document.querySelectorAll('input[name="mode"]')) {
+    radio.addEventListener("change", () => {
+      if (radio.checked) setMode(radio.value);
+    });
+  }
+
   function resetAccumulation() {
     frameIndex = 0;
     readTargetIndex = 0;
@@ -170,6 +267,12 @@ async function main() {
 
   function setMousePosition(event) {
     const rect = canvas.getBoundingClientRect();
+    if (mode === "normal") {
+      lightUv[0] = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+      lightUv[1] = clamp(1 - (event.clientY - rect.top) / rect.height, 0, 1);
+      return;
+    }
+
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
@@ -190,6 +293,7 @@ async function main() {
   canvas.setAttribute("aria-label", "Path tracer. WASD: move horizontally. Q: down. E: up.");
   canvas.addEventListener("pointerdown", () => canvas.focus({ preventScroll: true }));
   canvas.addEventListener("keydown", (event) => {
+    if (mode !== "path") return;
     if (!movementKeys.has(event.code) || event.ctrlKey || event.metaKey || event.altKey) return;
     event.preventDefault();
     pressedKeys.add(event.code);
@@ -201,6 +305,7 @@ async function main() {
     if (document.hidden) pressedKeys.clear();
   });
   canvas.addEventListener("wheel", (event) => {
+    if (mode !== "path") return;
     event.preventDefault();
 
     const nextCameraZOffset = clamp(
@@ -233,6 +338,44 @@ async function main() {
     resetAccumulation();
   }
 
+  function renderNormalMap(now) {
+    const p = normalMapParams;
+    if (p.orbit) {
+      const angle = (now - startTime) * 0.0006;
+      lightUv[0] = 0.5 + 0.38 * Math.cos(angle);
+      lightUv[1] = 0.55 + 0.32 * Math.sin(angle);
+    }
+
+    render(
+      gl,
+      geometry,
+      normalMapMaterial,
+      {
+        u_resolution: { type: "2f", value: [gl.canvas.width, gl.canvas.height] },
+        u_normalMap: { type: "1i", value: 0 },
+        u_normalBack: { type: "1i", value: 1 },
+        u_albedo: { type: "1i", value: 2 },
+        u_mask: { type: "1i", value: 3 },
+        u_light: { type: "2f", value: lightUv },
+        u_lightHeight: { type: "1f", value: p.lightHeight },
+        u_lightIntensity: { type: "1f", value: p.lightIntensity },
+        u_ambient: { type: "1f", value: p.ambient },
+        u_specularStrength: { type: "1f", value: p.specularStrength },
+        u_shininess: { type: "1f", value: p.shininess },
+        u_filmOffsetNm: { type: "1f", value: p.filmOffsetNm },
+        u_reflection: { type: "1f", value: p.reflection },
+        u_flipGreen: { type: "1i", value: p.flipGreen ? 1 : 0 },
+        u_view: { type: "1i", value: p.view },
+      },
+      [
+        { handle: normalMapTextures.normal },
+        { handle: normalMapTextures.normalBack },
+        { handle: normalMapTextures.albedo },
+        { handle: normalMapTextures.mask },
+      ],
+    );
+  }
+
   function frame(now) {
     // Bound elapsed time after a stalled/background frame to prevent large jumps.
     const deltaSeconds = Math.min(Math.max((now - previousFrameTime) * 0.001, 0), 0.05);
@@ -249,6 +392,12 @@ async function main() {
       deleteAccumulationTargets(gl, accumulationTargets);
       accumulationTargets = createAccumulationTargets(gl, gl.canvas.width, gl.canvas.height);
       resetAccumulation();
+    }
+
+    if (mode === "normal") {
+      renderNormalMap(now);
+      requestAnimationFrame(frame);
+      return;
     }
 
     updateCamera(deltaSeconds);
@@ -300,6 +449,7 @@ async function main() {
     requestAnimationFrame(frame);
   }
 
+  setMode(mode);
   requestAnimationFrame(frame);
 }
 
