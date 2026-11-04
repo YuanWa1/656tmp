@@ -47,9 +47,17 @@
         </section>
 
         <section class="stage__content">
-          <div class="content__demo">
-            <h3>Path Tracer Demo</h3>
+          <div class="content__demo" data-mode="normal">
+            <h3>Normal Map Demo</h3>
             <video controls autoplay loop muted playsinline preload="auto">
+              <source src="normalmap_demo.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+
+          <div class="content__demo" data-mode="path" hidden>
+            <h3>Path Tracer Demo</h3>
+            <video controls loop muted playsinline preload="metadata">
               <source src="proj6_demo.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>

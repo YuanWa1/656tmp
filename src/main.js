@@ -236,6 +236,11 @@ async function main() {
     mode = nextMode;
     for (const element of document.querySelectorAll("[data-mode]")) {
       element.hidden = element.dataset.mode !== mode;
+      // Only the visible mode's demo video plays.
+      for (const video of element.querySelectorAll("video")) {
+        if (element.hidden) video.pause();
+        else video.play().catch(() => {});
+      }
     }
     pressedKeys.clear();
     resetAccumulation();
