@@ -14,7 +14,7 @@ uniform float u_time;
 
 out vec4 outColor;
 
-const int SAMPLES = 8;
+const int SAMPLES = 4;
 const int MAX_BOUNCES = 18;
 
 const float PI = 3.14159265359;
@@ -180,20 +180,23 @@ void intersectPlaneRect(
 bool intersectScene(Ray ray, out Hit hit) {
   initHit(hit);
   // Each sphere is a zero-geometric-thickness soap shell, not a solid glass ball.
-  intersectSphere(ray, vec3(-0.95, 0.95, 0.0), 0.95, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
-  intersectSphere(ray, vec3(0.9, 0.66, 0.25), 0.66, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
+  intersectSphere(ray, vec3(-0.95, 1.10, 0.0), 0.95, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
+  intersectSphere(ray, vec3(0.9, 0.85, 0.25), 0.66, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
   intersectSphere(ray, vec3(0.35, 2.05, -0.65), 0.46, vec3(1.0), MAT_DIELECTRIC, 1.0, hit);
 
-  // Dark studio enclosure with large luminous side and ceiling panels.
-  // Black gaps preserve contrast instead of lighting every direction equally.
-  vec3 dark = vec3(0.006);
-  intersectPlaneRect(ray, vec3(0.0), vec3(0,1,0), vec2(-4), vec2(4), 0,2, dark, vec3(0), hit);
-  intersectPlaneRect(ray, vec3(0,5,0), vec3(0,-1,0), vec2(-4), vec2(4), 0,2, dark, vec3(0), hit);
-  intersectPlaneRect(ray, vec3(-4,0,0), vec3(1,0,0), vec2(0,-4), vec2(5,4), 1,2, dark, vec3(0), hit);
-  intersectPlaneRect(ray, vec3(4,0,0), vec3(-1,0,0), vec2(0,-4), vec2(5,4), 1,2, dark, vec3(0), hit);
-  intersectPlaneRect(ray, vec3(0,0,-4), vec3(0,0,1), vec2(-4,0), vec2(4,5), 0,1, dark, vec3(0), hit);
-  intersectPlaneRect(ray, vec3(0,0,4), vec3(0,0,-1), vec2(-4,0), vec2(4,5), 0,1, dark, vec3(0), hit);
-  // Panels are slightly inside the walls to avoid coincident intersections.
+  vec3 floorAlbedo = vec3(0.35, 0.33, 0.30);
+  vec3 sideAlbedo  = vec3(0.20);
+  vec3 backAlbedo  = vec3(0.03);
+  vec3 ceilAlbedo  = vec3(0.05); 
+
+  intersectPlaneRect(ray, vec3(0.0), vec3(0,1,0), vec2(-4), vec2(4), 0,2, floorAlbedo, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(0,5,0), vec3(0,-1,0), vec2(-4), vec2(4), 0,2, ceilAlbedo, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(-4,0,0), vec3(1,0,0), vec2(0,-4), vec2(5,4), 1,2, sideAlbedo, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(4,0,0), vec3(-1,0,0), vec2(0,-4), vec2(5,4), 1,2, sideAlbedo, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(0,0,-4), vec3(0,0,1), vec2(-4,0), vec2(4,5), 0,1, backAlbedo, vec3(0), hit);
+  intersectPlaneRect(ray, vec3(0,0,4), vec3(0,0,-1), vec2(-4,0), vec2(4,5), 0,1, sideAlbedo, vec3(0), hit);
+
+    // Panels are slightly inside the walls to avoid coincident intersections.
   intersectPlaneRect(ray, vec3(-3.98,0,0), vec3(1,0,0), vec2(1.4,-2.8), vec2(4.8,2.8), 1,2, vec3(0), vec3(7.0), hit);
   intersectPlaneRect(ray, vec3(3.98,0,0), vec3(-1,0,0), vec2(2.0,-2.2), vec2(4.6,1.8), 1,2, vec3(0), vec3(5.0), hit);
   intersectPlaneRect(ray, vec3(0,4.98,0), vec3(0,-1,0), vec2(-3.2,-3.0), vec2(3.2,2.0), 0,2, vec3(0), vec3(6.0), hit);
