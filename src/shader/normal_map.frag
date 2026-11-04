@@ -22,15 +22,7 @@ uniform sampler2D u_mask;
 
 uniform vec2 u_light;           // light position in uv space (0..1)
 uniform float u_lightHeight;    // light distance above the image plane
-uniform float u_lightIntensity;
-uniform float u_ambient;
-uniform float u_specularStrength;
-uniform float u_shininess;
-uniform float u_filmOffsetNm;   // shifts the whole thickness field
-uniform float u_reflection;     // brightness of the environment the film reflects
 uniform float u_colorShift;     // artistic: how far the colors sweep with the light
-uniform float u_vividness;      // artistic: saturation/brightness of the film
-uniform int u_flipGreen;        // 1 for DirectX-style (-Y) normal maps
 uniform int u_showNormals;      // 1 shows the decoded normals instead
 
 out vec4 outColor;
@@ -42,12 +34,18 @@ const float FILM_VARIATION_NM = 220.0;
 const vec3 LIGHT_COLOR = vec3(1.0, 0.97, 0.92);
 const vec3 V = vec3(0.0, 0.0, 1.0); // orthographic view of the baked image
 
+const float LIGHT_INTENSITY = 4.0;
+const float AMBIENT = 0.06;
+const float SPECULAR_STRENGTH = 1.5;
+const float SHININESS = 160.0;
+const float ENV_REFLECTION = 1.4;   // brightness of the environment the film reflects
+const float VIVIDNESS = 1.0;        // artistic saturation/brightness of the film
+
 // ---------------------------------------------------------------------------
 // Normal decoding
 
 vec3 decodeNormal(sampler2D map, vec2 p) {
   vec3 n = texture(map, p).rgb * 2.0 - 1.0;
-  if (u_flipGreen == 1) n.y = -n.y;
   // Filtering between texels shortens the vector; renormalize. A degenerate
   // texel (e.g. black) falls back to facing the viewer instead of NaN.
   float len = length(n);
@@ -116,7 +114,7 @@ float filmThicknessNm(vec2 p, vec3 n) {
   // Gravity drains the film: thinner near the top of a bubble, which also
   // lays the colors out in roughly horizontal, swirling bands.
   float drainage = -170.0 * n.y;
-  return max(FILM_THICKNESS_NM + FILM_VARIATION_NM * pattern + drainage + u_filmOffsetNm, 60.0);
+  return max(FILM_THICKNESS_NM + FILM_VARIATION_NM * pattern + drainage, 60.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +132,7 @@ LightSample sampleLight(vec2 p) {
   float dist2 = dot(toLight, toLight);
   LightSample s;
   s.L = toLight * inversesqrt(dist2);
-  s.radiance = LIGHT_COLOR * u_lightIntensity / (1.0 + 2.5 * dist2);
+  s.radiance = LIGHT_COLOR * LIGHT_INTENSITY / (1.0 + 2.5 * dist2);
   return s;
 }
 
@@ -144,7 +142,7 @@ LightSample sampleLight(vec2 p) {
 vec3 environment(vec3 dir) {
   float sky = smoothstep(-0.15, 0.85, dir.y);
   vec3 env = mix(vec3(0.02, 0.02, 0.025), vec3(0.85, 0.88, 0.95), sky);
-  return env * u_reflection;
+  return env * ENV_REFLECTION;
 }
 
 // Diffuse room surface: Lambert plus a faint Schlick-weighted Blinn-Phong
@@ -160,21 +158,21 @@ vec3 shadeSurface(vec2 p) {
   float fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(h, V), 0.0), 5.0);
   // Fade the highlight in at the terminator so it never pops on or off.
   float terminator = smoothstep(0.0, 0.15, nDotL);
-  float shininess = u_shininess * 0.25;
+  float shininess = SHININESS * 0.25;
   float normalization = (shininess + 8.0) / (8.0 * PI);
 
   vec3 diffuse = albedo * light.radiance * nDotL;
   vec3 specular = fresnel * normalization * pow(nDotH, shininess)
-                * u_specularStrength * 0.5 * light.radiance * terminator;
-  return albedo * u_ambient + diffuse + specular;
+                * SPECULAR_STRENGTH * 0.5 * light.radiance * terminator;
+  return albedo * AMBIENT + diffuse + specular;
 }
 
 // Artistic grading of the physical film reflectance: push saturation and
 // brightness so the interference colors read clearly over a bright room.
 vec3 stylizeFilm(vec3 reflectance) {
   float luma = dot(reflectance, vec3(0.2126, 0.7152, 0.0722));
-  vec3 saturated = max(mix(vec3(luma), reflectance, 1.0 + 1.5 * u_vividness), 0.0);
-  return saturated * (1.0 + 2.5 * u_vividness);
+  vec3 saturated = max(mix(vec3(luma), reflectance, 1.0 + 1.5 * VIVIDNESS), 0.0);
+  return saturated * (1.0 + 2.5 * VIVIDNESS);
 }
 
 // Soap film over the background: transmitted background, iridescent
@@ -201,8 +199,8 @@ vec3 shadeBubble(vec2 p, vec3 background) {
   // Broad glossy sheen plus a sharp highlight, tinted by the film.
   float terminator = smoothstep(0.0, 0.15, facing);
   float sheen = 0.8 * pow(nDotH, 48.0);
-  float normalization = (u_shininess + 8.0) / (8.0 * PI);
-  float sharp = normalization * pow(nDotH, u_shininess) * u_specularStrength;
+  float normalization = (SHININESS + 8.0) / (8.0 * PI);
+  float sharp = normalization * pow(nDotH, SHININESS) * SPECULAR_STRENGTH;
   vec3 lightReflection = stylizeFilm(filmLight) * (sheen + sharp) * light.radiance * terminator;
 
   // Transmission uses the physical reflectance so the bubble stays clear.

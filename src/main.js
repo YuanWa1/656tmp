@@ -152,16 +152,9 @@ function bindNormalMapControls() {
   const read = (id) => document.getElementById(id);
   const sliders = {
     lightHeight: ["nm-height", 2],
-    lightIntensity: ["nm-intensity", 1],
-    specularStrength: ["nm-spec", 2],
-    shininess: ["nm-shininess", 0],
-    ambient: ["nm-ambient", 3],
-    filmOffsetNm: ["nm-film", 0],
-    reflection: ["nm-reflection", 2],
     colorShift: ["nm-shift", 2],
-    vividness: ["nm-vivid", 2],
   };
-  const params = { showNormals: false, flipGreen: false, orbit: false };
+  const params = { showNormals: false, orbit: false };
 
   for (const [key, [id, digits]] of Object.entries(sliders)) {
     const input = read(id);
@@ -177,8 +170,6 @@ function bindNormalMapControls() {
   const normals = read("nm-normals");
   normals.addEventListener("change", () => { params.showNormals = normals.checked; });
 
-  const flip = read("nm-flip");
-  flip.addEventListener("change", () => { params.flipGreen = flip.checked; });
   const orbit = read("nm-orbit");
   orbit.addEventListener("change", () => { params.orbit = orbit.checked; });
 
@@ -358,15 +349,7 @@ async function main() {
         u_mask: { type: "1i", value: 3 },
         u_light: { type: "2f", value: lightUv },
         u_lightHeight: { type: "1f", value: p.lightHeight },
-        u_lightIntensity: { type: "1f", value: p.lightIntensity },
-        u_ambient: { type: "1f", value: p.ambient },
-        u_specularStrength: { type: "1f", value: p.specularStrength },
-        u_shininess: { type: "1f", value: p.shininess },
-        u_filmOffsetNm: { type: "1f", value: p.filmOffsetNm },
-        u_reflection: { type: "1f", value: p.reflection },
         u_colorShift: { type: "1f", value: p.colorShift },
-        u_vividness: { type: "1f", value: p.vividness },
-        u_flipGreen: { type: "1i", value: p.flipGreen ? 1 : 0 },
         u_showNormals: { type: "1i", value: p.showNormals ? 1 : 0 },
       },
       [
