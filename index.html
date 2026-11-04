@@ -3,21 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Soap Bubble Studio</title>
+    <title>Soap Bubble Studio - Path Tracer</title>
   </head>
   <body>
     <div class="page">
       <main class="stage">
         <section class="stage__frame">
           <canvas id="glcanvas" width="640" height="640"></canvas>
-          <p>Click the view to move: W/S forward/back, A/D left/right, Q down, E up.</p>
+          <p>Click the view to move: W/S forward/back, A/D left/right, Q down, E up. Drag mouse to rotate.</p>
         </section>
 
         <section class="stage__content">
+          <div class="content__demo">
+            <h3>Path Tracer Demo</h3>
+            <video controls autoplay loop muted playsinline preload="auto">
+              <source src="proj6_demo.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+
           <div class="content__description">
-            <h2>Soap Bubble Studio</h2>
-            <p>Three hollow soap bubbles inside a box whose six faces all emit uniform white light. Each shell models air–soap film–air interference with a film IOR of 1.333. Static, warped Perlin noise varies the film thickness between 200 and 700 nm across each bubble, without texture seams.</p>
-            <p>Colors use a three-wavelength RGB approximation. Four samples per frame accumulate while the camera is still; moving resets accumulation to avoid ghosting. Keep the camera still to inspect a converged image.</p>
+            <h2>Description</h2>
+            <p>
+              This is a progressive Monte Carlo path tracer implemented in a WebGL fragment shader.
+              It traces multiple jittered rays per frame and blends them over time to approximate global illumination, soft area-light shadows, and color bleeding.
+              Moving or rotating the camera immediately resets sample accumulation for responsive navigation, while keeping the camera still allows the noisy image to converge into a clean, smooth result.
+            </p>
+            <p>
+              The scene features three hollow soap bubbles enclosed in an illuminated studio.
+              Each bubble shell is modeled as an air–soap film–air interface with a film IOR of 1.333.
+              Thin-film interference is evaluated using the Airy reflectance formula across RGB wavelengths, producing realistic iridescent colors.
+              Film thickness smoothly varies between 200 nm and 700 nm across each bubble using 3D Perlin noise.
+            </p>
           </div>
         </section>
       </main>
