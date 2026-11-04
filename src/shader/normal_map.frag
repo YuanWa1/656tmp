@@ -28,16 +28,12 @@ uniform float u_specularStrength;
 uniform float u_shininess;
 uniform float u_filmOffsetNm;   // shifts the whole thickness field
 uniform float u_reflection;     // brightness of the environment the film reflects
+uniform float u_colorShift;     // artistic: how far the colors sweep with the light
+uniform float u_vividness;      // artistic: saturation/brightness of the film
 uniform int u_flipGreen;        // 1 for DirectX-style (-Y) normal maps
-uniform int u_view;             // see VIEW_* below
+uniform int u_showNormals;      // 1 shows the decoded normals instead
 
 out vec4 outColor;
-
-const int VIEW_SHADED = 0;
-const int VIEW_NORMALS = 1;
-const int VIEW_DIFFUSE = 2;
-const int VIEW_SPECULAR = 3;
-const int VIEW_FILM = 4;
 
 const float PI = 3.14159265359;
 const float FILM_IOR = 1.333;
@@ -151,16 +147,9 @@ vec3 environment(vec3 dir) {
   return env * u_reflection;
 }
 
-struct Shading {
-  vec3 diffuse;
-  vec3 specular;
-  vec3 film;       // film reflectance for the light, at angle acos(H·L) (debug)
-  vec3 color;
-};
-
 // Diffuse room surface: Lambert plus a faint Schlick-weighted Blinn-Phong
 // sheen, so diffuse and specular are both visible away from the bubbles.
-void shadeSurface(vec2 p, inout Shading s) {
+vec3 shadeSurface(vec2 p) {
   vec3 n = decodeNormal(u_normalBack, p);
   vec3 albedo = texture(u_albedo, p).rgb;
   LightSample light = sampleLight(p);
@@ -174,46 +163,50 @@ void shadeSurface(vec2 p, inout Shading s) {
   float shininess = u_shininess * 0.25;
   float normalization = (shininess + 8.0) / (8.0 * PI);
 
-  s.diffuse = albedo * light.radiance * nDotL;
-  s.specular = fresnel * normalization * pow(nDotH, shininess)
-             * u_specularStrength * 0.5 * light.radiance * terminator;
-  s.film = vec3(0.0);
-  s.color = albedo * u_ambient + s.diffuse + s.specular;
+  vec3 diffuse = albedo * light.radiance * nDotL;
+  vec3 specular = fresnel * normalization * pow(nDotH, shininess)
+                * u_specularStrength * 0.5 * light.radiance * terminator;
+  return albedo * u_ambient + diffuse + specular;
+}
+
+// Artistic grading of the physical film reflectance: push saturation and
+// brightness so the interference colors read clearly over a bright room.
+vec3 stylizeFilm(vec3 reflectance) {
+  float luma = dot(reflectance, vec3(0.2126, 0.7152, 0.0722));
+  vec3 saturated = max(mix(vec3(luma), reflectance, 1.0 + 1.5 * u_vividness), 0.0);
+  return saturated * (1.0 + 2.5 * u_vividness);
 }
 
 // Soap film over the background: transmitted background, iridescent
-// reflection of the environment, and an iridescent specular highlight.
-void shadeBubble(vec2 p, Shading background, inout Shading s) {
+// reflection of the environment, and an iridescent highlight from the light.
+vec3 shadeBubble(vec2 p, vec3 background) {
   vec3 n = decodeNormal(u_normalMap, p);
   LightSample light = sampleLight(p);
-  float thickness = filmThicknessNm(p, n);
+
+  // Artistic, not physical: slide the film thickness with the angle at which
+  // the light hits each point. Moving the light sweeps the color bands across
+  // the whole bubble instead of only nudging the hue of the highlight.
+  float facing = max(dot(n, light.L), 0.0);
+  float thickness = filmThicknessNm(p, n) + u_colorShift * 420.0 * (0.55 - facing);
 
   float nDotV = max(dot(n, V), 0.0);
-  vec3 filmView = thinFilmReflectance(nDotV, thickness);
-
-  // Mirror reflection of the fixed environment. Light leaving a mirror toward
-  // the eye arrives at the view angle, so this term uses filmView (N·V).
-  vec3 envReflection = filmView * environment(reflect(-V, n));
-
-  // Light reflects off microfacets oriented along the half vector H, so its
-  // true angle of incidence on the film is acos(H·L). That angle changes as
-  // the light moves, and with it the interference color of both lobes.
   vec3 h = normalize(light.L + V);
-  float nDotL = max(dot(n, light.L), 0.0);
   float nDotH = max(dot(n, h), 0.0);
-  vec3 filmHalf = thinFilmReflectance(max(dot(h, light.L), 0.0), thickness);
-  float terminator = smoothstep(0.0, 0.15, nDotL);
-  // Broad glossy sheen (film micro-ripples) plus a sharp mirror-like highlight.
+  vec3 filmView = thinFilmReflectance(nDotV, thickness);
+  vec3 filmLight = thinFilmReflectance(max(dot(h, light.L), 0.0), thickness);
+
+  // Mirror reflection of the fixed studio environment.
+  vec3 envReflection = stylizeFilm(filmView) * environment(reflect(-V, n));
+
+  // Broad glossy sheen plus a sharp highlight, tinted by the film.
+  float terminator = smoothstep(0.0, 0.15, facing);
   float sheen = 0.8 * pow(nDotH, 48.0);
   float normalization = (u_shininess + 8.0) / (8.0 * PI);
   float sharp = normalization * pow(nDotH, u_shininess) * u_specularStrength;
-  vec3 lightReflection = filmHalf * (sheen + sharp) * light.radiance * terminator;
+  vec3 lightReflection = stylizeFilm(filmLight) * (sheen + sharp) * light.radiance * terminator;
 
-  // Lossless film: whatever is not reflected is transmitted straight through.
-  s.diffuse = background.diffuse * (1.0 - filmView);
-  s.specular = envReflection + lightReflection;
-  s.film = filmHalf;
-  s.color = background.color * (1.0 - filmView) + s.specular;
+  // Transmission uses the physical reflectance so the bubble stays clear.
+  return background * (1.0 - filmView) + envReflection + lightReflection;
 }
 
 vec3 toneMap(vec3 c) {
@@ -223,42 +216,22 @@ vec3 toneMap(vec3 c) {
 
 void main() {
   vec2 p = uv;
-  float bubble = texture(u_mask, p).r;
 
-  if (u_view == VIEW_NORMALS) {
+  if (u_showNormals == 1) {
     // Decoded, renormalized normals re-encoded for display.
     outColor = vec4(decodeNormal(u_normalMap, p) * 0.5 + 0.5, 1.0);
     return;
   }
 
-  Shading background;
-  shadeSurface(p, background);
-
-  Shading s = background;
+  vec3 color = shadeSurface(p);
+  float bubble = texture(u_mask, p).r;
   if (bubble > 0.0) {
-    Shading film;
-    shadeBubble(p, background, film);
     // Mask is anti-aliased; blend at the silhouette.
-    s.diffuse = mix(background.diffuse, film.diffuse, bubble);
-    s.specular = mix(background.specular, film.specular, bubble);
-    s.film = film.film * bubble;
-    s.color = mix(background.color, film.color, bubble);
+    color = mix(color, shadeBubble(p, color), bubble);
   }
 
-  vec3 color;
-  if (u_view == VIEW_DIFFUSE) {
-    color = toneMap(s.diffuse);
-  } else if (u_view == VIEW_SPECULAR) {
-    color = toneMap(s.specular);
-  } else if (u_view == VIEW_FILM) {
-    // Film reflectance is ~0-15%; scale it up to make the bands readable.
-    color = pow(clamp(s.film * 5.0, 0.0, 1.0), vec3(1.0 / 2.2));
-  } else {
-    // Small glow marking where the light is.
-    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
-    float d = length((p - u_light) * vec2(aspect, 1.0));
-    color = toneMap(s.color) + vec3(1.0, 0.95, 0.85) * exp(-d * d * 9000.0);
-  }
-
-  outColor = vec4(color, 1.0);
+  // Small glow marking where the light is.
+  float aspect = u_resolution.x / max(u_resolution.y, 1.0);
+  float d = length((p - u_light) * vec2(aspect, 1.0));
+  outColor = vec4(toneMap(color) + vec3(1.0, 0.95, 0.85) * exp(-d * d * 9000.0), 1.0);
 }

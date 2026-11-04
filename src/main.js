@@ -158,8 +158,10 @@ function bindNormalMapControls() {
     ambient: ["nm-ambient", 3],
     filmOffsetNm: ["nm-film", 0],
     reflection: ["nm-reflection", 2],
+    colorShift: ["nm-shift", 2],
+    vividness: ["nm-vivid", 2],
   };
-  const params = { view: 0, flipGreen: false, orbit: false };
+  const params = { showNormals: false, flipGreen: false, orbit: false };
 
   for (const [key, [id, digits]] of Object.entries(sliders)) {
     const input = read(id);
@@ -172,10 +174,8 @@ function bindNormalMapControls() {
     sync();
   }
 
-  const view = read("nm-view");
-  const syncView = () => { params.view = Number(view.value); };
-  view.addEventListener("change", syncView);
-  syncView();
+  const normals = read("nm-normals");
+  normals.addEventListener("change", () => { params.showNormals = normals.checked; });
 
   const flip = read("nm-flip");
   flip.addEventListener("change", () => { params.flipGreen = flip.checked; });
@@ -364,8 +364,10 @@ async function main() {
         u_shininess: { type: "1f", value: p.shininess },
         u_filmOffsetNm: { type: "1f", value: p.filmOffsetNm },
         u_reflection: { type: "1f", value: p.reflection },
+        u_colorShift: { type: "1f", value: p.colorShift },
+        u_vividness: { type: "1f", value: p.vividness },
         u_flipGreen: { type: "1i", value: p.flipGreen ? 1 : 0 },
-        u_view: { type: "1i", value: p.view },
+        u_showNormals: { type: "1i", value: p.showNormals ? 1 : 0 },
       },
       [
         { handle: normalMapTextures.normal },
