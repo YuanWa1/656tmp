@@ -4,9 +4,11 @@ import vertexShaderSource from "./shader/basic.vert?raw";
 import fragmentShaderSource from "./shader/path_trace.frag?raw";
 import displayShaderSource from "./shader/display.frag?raw";
 import normalMapShaderSource from "./shader/normal_map.frag?raw";
+import envMapShaderSource from "./shader/env_map.frag?raw";
 
 import { render } from "./renderer.js";
 import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
+import { loadHdrTexture } from "./hdr-loader.js";
 
 const CAMERA_Z_SCROLL_SPEED = 0.002;
 const CAMERA_Z_MIN = -2.5;
@@ -176,6 +178,38 @@ function bindNormalMapControls() {
   return params;
 }
 
+// CC0 panoramas from Poly Haven (via the three.js examples).
+const ENVIRONMENTS = {
+  san_giuseppe_bridge: { file: "san_giuseppe_bridge_2k.hdr", exposure: 1.0 },
+  venice_sunset: { file: "venice_sunset_1k.hdr", exposure: 0.8 },
+  royal_esplanade: { file: "royal_esplanade_1k.hdr", exposure: 0.6 },
+};
+const ENV_DIR = `${import.meta.env.BASE_URL}envmap/`;
+
+function bindEnvMapControls() {
+  const read = (id) => document.getElementById(id);
+  const params = { env: "san_giuseppe_bridge", mirror: false, autoRotate: false, showNormals: false };
+  const env = read("env-select");
+  env.addEventListener("change", () => { params.env = env.value; });
+  for (const [id, key] of [["env-mirror", "mirror"], ["env-rotate", "autoRotate"], ["env-normals", "showNormals"]]) {
+    const input = read(id);
+    input.addEventListener("change", () => { params[key] = input.checked; });
+  }
+  return params;
+}
+
+// Column-major rotation (world -> environment): yaw about +Y, then pitch about +X.
+function envRotationMatrix(yaw, pitch) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  // Ry(yaw) * Rx(pitch)
+  return new Float32Array([
+    cy, 0, -sy,
+    sy * sp, cp, cy * sp,
+    sy * cp, -sp, cy * cp,
+  ]);
+}
+
 function resizeCanvasToDisplaySize(canvas) {
   const pixelRatio = window.devicePixelRatio || 1;
   const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio));
@@ -203,6 +237,9 @@ async function main() {
   const material = linkProgram(gl, vertexShader, fragmentShader);
   const displayMaterial = linkProgram(gl, vertexShader, displayFragmentShader);
   const normalMapMaterial = linkProgram(gl, vertexShader, normalMapFragmentShader);
+  const envMapFragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, envMapShaderSource);
+  const envMapMaterial = linkProgram(gl, vertexShader, envMapFragmentShader);
+  gl.deleteShader(envMapFragmentShader);
 
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
@@ -211,6 +248,19 @@ async function main() {
 
   const normalMapTextures = await loadNormalMapScene(gl);
   const normalMapParams = bindNormalMapControls();
+  const envParams = bindEnvMapControls();
+  // HDRs load on first use; the default one before the first frame.
+  const envTextures = {};
+  const envLoading = {};
+  function requestEnv(name) {
+    if (!envLoading[name]) {
+      envLoading[name] = loadHdrTexture(gl, `${ENV_DIR}${ENVIRONMENTS[name].file}`)
+        .then((texture) => { envTextures[name] = texture; })
+        .catch((error) => console.error(error));
+    }
+    return envLoading[name];
+  }
+  await requestEnv(envParams.env);
 
   const geometry = createFullscreenQuad(gl, material.program);
 
@@ -226,9 +276,13 @@ async function main() {
   let previousFrameTime = performance.now();
   const startTime = performance.now();
 
+  // "env": fixed view, the mouse rotates the environment map.
   // "normal": fixed view, the mouse moves the light.
   // "path": progressive path tracer, the mouse and keys move the camera.
-  let mode = "normal";
+  let mode = "env";
+  // Environment orientation: target follows the mouse, current eases toward it.
+  const envTarget = { yaw: 0, pitch: 0 };
+  const envCurrent = { yaw: 0, pitch: 0 };
   // Light position in uv space (origin bottom-left), upper left by default.
   const lightUv = [0.3, 0.75];
 
@@ -263,6 +317,13 @@ async function main() {
 
   function setMousePosition(event) {
     const rect = canvas.getBoundingClientRect();
+    if (mode === "env") {
+      const u = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+      const v = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+      envTarget.yaw = (u - 0.5) * 2 * Math.PI;
+      envTarget.pitch = (v - 0.5) * 0.7;
+      return;
+    }
     if (mode === "normal") {
       lightUv[0] = clamp((event.clientX - rect.left) / rect.width, 0, 1);
       lightUv[1] = clamp(1 - (event.clientY - rect.top) / rect.height, 0, 1);
@@ -334,6 +395,41 @@ async function main() {
     resetAccumulation();
   }
 
+  function renderEnvMap(deltaSeconds) {
+    const p = envParams;
+    if (p.autoRotate) envTarget.yaw += deltaSeconds * 0.35;
+    // Exponential smoothing keeps fast mouse moves from jumping.
+    const k = 1 - Math.exp(-deltaSeconds * 10);
+    envCurrent.yaw += (envTarget.yaw - envCurrent.yaw) * k;
+    envCurrent.pitch += (envTarget.pitch - envCurrent.pitch) * k;
+
+    requestEnv(p.env);
+    // Keep showing the previous environment until the new one has loaded.
+    const texture = envTextures[p.env] ?? Object.values(envTextures)[0];
+    const exposure = envTextures[p.env] ? ENVIRONMENTS[p.env].exposure : 1.0;
+
+    render(
+      gl,
+      geometry,
+      envMapMaterial,
+      {
+        u_resolution: { type: "2f", value: [gl.canvas.width, gl.canvas.height] },
+        u_normalMap: { type: "1i", value: 0 },
+        u_mask: { type: "1i", value: 1 },
+        u_env: { type: "1i", value: 2 },
+        u_envRotation: { type: "mat3", value: envRotationMatrix(envCurrent.yaw, envCurrent.pitch) },
+        u_exposure: { type: "1f", value: exposure },
+        u_material: { type: "1i", value: p.mirror ? 1 : 0 },
+        u_showNormals: { type: "1i", value: p.showNormals ? 1 : 0 },
+      },
+      [
+        { handle: normalMapTextures.normal },
+        { handle: normalMapTextures.mask },
+        { handle: texture },
+      ],
+    );
+  }
+
   function renderNormalMap(now) {
     const p = normalMapParams;
     if (p.orbit) {
@@ -384,6 +480,11 @@ async function main() {
       resetAccumulation();
     }
 
+    if (mode === "env") {
+      renderEnvMap(deltaSeconds);
+      requestAnimationFrame(frame);
+      return;
+    }
     if (mode === "normal") {
       renderNormalMap(now);
       requestAnimationFrame(frame);

@@ -20,6 +20,9 @@ function uploadUniform(gl, location, uniform) {
         case "3fv":
             gl.uniform3fv(location, value);
             break;
+        case "mat3":
+            gl.uniformMatrix3fv(location, false, value);
+            break;
         default:
             throw new Error(`Unsupported uniform type: ${type}`);
     }
