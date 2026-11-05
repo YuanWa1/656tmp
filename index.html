@@ -114,9 +114,10 @@
               so the panorama's wrap-around never shows and curved silhouettes do not shimmer as the environment turns.
             </p>
             <p>
-              The silver and gold spheres are polished metals: a mirror reflection weighted by Schlick Fresnel. The white sphere is a rough plastic:
-              Lambert diffuse lit by an irradiance map (the panorama cosine-convolved once on load) plus a dielectric reflection that blurs with
-              roughness by sampling coarser mip levels. Roughness 0 gives a glossy coat; 1 gives a matte, purely diffuse surface.
+              The silver and gold spheres are polished metals: a mirror reflection weighted by Schlick Fresnel. The white sphere is glazed:
+              Lambert diffuse lit by an irradiance map (the panorama cosine-convolved once on load) plus a Fresnel-weighted reflection that blurs with
+              roughness by sampling coarser mip levels. To make the slider read clearly, the glaze's base reflectance is exaggerated and fades with
+              roughness (0.3 to 0.02; a real glaze is about 0.04). Roughness 0 gives a sharp reflection over white; 1 gives a matte, purely diffuse surface.
               Panoramas: Poly Haven (CC0).
             </p>
           </div>
