@@ -8,6 +8,7 @@ camera (mouse centered, no WASD/scroll offset):
   normal_back.png  normal of the surface seen *through* the bubbles
   albedo.png       sRGB albedo of that background surface
   mask.png         bubble coverage (anti-aliased)
+  objects.png      per-sphere coverage: R, G, B = SPHERES[0], [1], [2]
 
 Normals use the common OpenGL tangent/view convention: +X right, +Y up,
 +Z toward the viewer, encoded as rgb = n * 0.5 + 0.5. A surface facing the
@@ -80,6 +81,7 @@ def trace(origin, dirs, include_spheres):
     normal = np.zeros((n, 3))
     albedo = np.zeros((n, 3))
     is_bubble = np.zeros(n, dtype=bool)
+    sphere_id = np.full(n, -1)
 
     for point, pn, bmin, bmax, au, av, alb in PLANES:
         pn = np.array(pn, float)
@@ -94,9 +96,10 @@ def trace(origin, dirs, include_spheres):
         normal[ok] = np.where(denom[ok, None] < 0, pn, -pn)
         albedo[ok] = alb
         is_bubble[ok] = False
+        sphere_id[ok] = -1
 
     if include_spheres:
-        for center, radius in SPHERES:
+        for index, (center, radius) in enumerate(SPHERES):
             oc = origin - np.array(center)
             b = dirs @ oc
             h = b * b - (oc @ oc - radius * radius)
@@ -106,8 +109,9 @@ def trace(origin, dirs, include_spheres):
             normal[ok] = normalize(origin + t[ok, None] * dirs[ok] - center)
             albedo[ok] = 0.0
             is_bubble[ok] = True
+            sphere_id[ok] = index
 
-    return normal, albedo, is_bubble
+    return normal, albedo, is_bubble, sphere_id
 
 
 def to_view(normal_world, r, u, f):
@@ -134,8 +138,8 @@ def main():
     sx, sy = np.meshgrid(xs, ys)
     dirs = normalize(sx[..., None] * r + sy[..., None] * u + 1.55 * f).reshape(-1, 3)
 
-    front_n, _, bubble = trace(cam_pos, dirs, include_spheres=True)
-    back_n, back_albedo, _ = trace(cam_pos, dirs, include_spheres=False)
+    front_n, _, bubble, sphere_id = trace(cam_pos, dirs, include_spheres=True)
+    back_n, back_albedo, _, _ = trace(cam_pos, dirs, include_spheres=False)
 
     def downsample(a):
         a = a.reshape(SIZE, SUPERSAMPLE, SIZE, SUPERSAMPLE, -1)
@@ -145,6 +149,7 @@ def main():
     back_view = downsample(to_view(back_n, r, u, f))
     albedo = downsample(back_albedo)
     mask = downsample(bubble.astype(float)[:, None])[..., 0]
+    objects = downsample(np.stack([sphere_id == i for i in range(3)], axis=-1).astype(float))
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     Image.fromarray(encode_normal(front_view), "RGB").save(OUT_DIR / "normal.png")
@@ -152,6 +157,7 @@ def main():
     albedo8 = np.round(linear_to_srgb(albedo) * 255.0).astype(np.uint8)
     Image.fromarray(albedo8, "RGB").save(OUT_DIR / "albedo.png")
     Image.fromarray(np.round(mask * 255.0).astype(np.uint8), "L").save(OUT_DIR / "mask.png")
+    Image.fromarray(np.round(objects * 255.0).astype(np.uint8), "RGB").save(OUT_DIR / "objects.png")
     print(f"wrote {SIZE}x{SIZE} maps to {OUT_DIR}")
 
 

@@ -38,10 +38,9 @@
                 <option value="royal_esplanade">Shopping arcade</option>
               </select>
             </label>
-            <label class="toggle">
-              <input id="env-mirror" type="checkbox" />
-              <span class="toggle__track"></span>
-              <span>Mirror spheres</span>
+            <label class="control">
+              <span class="control__label">Roughness (white sphere) <output id="env-roughness-out"></output></span>
+              <input id="env-roughness" type="range" min="0" max="1" step="0.01" value="0.5" />
             </label>
             <label class="toggle">
               <input id="env-rotate" type="checkbox" />
@@ -105,19 +104,19 @@
           <div class="content__description" data-mode="env">
             <h2>Environment-map mode</h2>
             <p>
-              Three soap bubbles in front of an HDR panorama, from one fixed camera with no geometry. The bubbles exist only as a view-space normal map
-              and a coverage mask baked from the path tracer's scene (<code>scripts/bake_normal_map.py</code>). Normals are decoded with
+              Three spheres in front of an HDR panorama, from one fixed camera with no geometry. They exist only as a view-space normal map and a
+              per-sphere coverage map baked from the path tracer's scene (<code>scripts/bake_normal_map.py</code>). Normals are decoded with
               <code>N = normalize(tex * 2.0 - 1.0)</code>.
             </p>
             <p>
               Each pixel's view ray comes from the same camera used for baking. The reflection direction is <code>reflect(D, N)</code>, rotated by the
-              environment orientation and mapped to equirectangular coordinates. Lookups use explicit gradients so the panorama's wrap-around seam
-              never shows, and the HDR is mipmapped so curved silhouettes do not shimmer as the environment turns.
+              environment orientation and mapped to equirectangular coordinates. Lookups pick their mip level from explicit, seam-aware gradients,
+              so the panorama's wrap-around never shows and curved silhouettes do not shimmer as the environment turns.
             </p>
             <p>
-              Each bubble also shows its back film: for a sphere the exit normal is the entry normal with its along-ray component flipped, so it follows from
-              the normal map and the view ray alone. Front reflection, back reflection and the transmitted panorama are weighted by a stylized
-              thin-film reflectance. "Mirror spheres" swaps the film for polished silver to show the raw environment reflection.
+              The silver and gold spheres are polished metals: a mirror reflection weighted by Schlick Fresnel. The white sphere is a rough plastic:
+              Lambert diffuse lit by an irradiance map (the panorama cosine-convolved once on load) plus a dielectric reflection that blurs with
+              roughness by sampling coarser mip levels. Roughness 0 gives a glossy coat; 1 gives a matte, purely diffuse surface.
               Panoramas: Poly Haven (CC0).
             </p>
           </div>

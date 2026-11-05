@@ -8,7 +8,7 @@ import envMapShaderSource from "./shader/env_map.frag?raw";
 
 import { render } from "./renderer.js";
 import { compileShader, createTexture2D, linkProgram } from "./webgl-utils.js";
-import { loadHdrTexture } from "./hdr-loader.js";
+import { loadEnvironment } from "./hdr-loader.js";
 
 const CAMERA_Z_SCROLL_SPEED = 0.002;
 const CAMERA_Z_MIN = -2.5;
@@ -136,8 +136,8 @@ async function loadImage(url) {
 
 // Normal maps and masks are linear data; albedo is sRGB color.
 async function loadNormalMapScene(gl) {
-  const [normal, normalBack, albedo, mask] = await Promise.all(
-    ["normal.png", "normal_back.png", "albedo.png", "mask.png"].map((name) =>
+  const [normal, normalBack, albedo, mask, objects] = await Promise.all(
+    ["normal.png", "normal_back.png", "albedo.png", "mask.png", "objects.png"].map((name) =>
       loadImage(`${NORMAL_MAP_DIR}${name}`),
     ),
   );
@@ -147,6 +147,7 @@ async function loadNormalMapScene(gl) {
     normalBack: createTexture2D(gl, normalBack, { ...options, isLinear: true }),
     albedo: createTexture2D(gl, albedo, { ...options, isLinear: false }),
     mask: createTexture2D(gl, mask, { ...options, isLinear: true }),
+    objects: createTexture2D(gl, objects, { ...options, isLinear: true }),
   };
 }
 
@@ -180,7 +181,7 @@ function bindNormalMapControls() {
 
 // CC0 panoramas from Poly Haven (via the three.js examples).
 const ENVIRONMENTS = {
-  san_giuseppe_bridge: { file: "san_giuseppe_bridge_2k.hdr", exposure: 1.0 },
+  san_giuseppe_bridge: { file: "san_giuseppe_bridge_2k.hdr", exposure: 0.75 },
   venice_sunset: { file: "venice_sunset_1k.hdr", exposure: 0.8 },
   royal_esplanade: { file: "royal_esplanade_1k.hdr", exposure: 0.6 },
 };
@@ -188,10 +189,18 @@ const ENV_DIR = `${import.meta.env.BASE_URL}envmap/`;
 
 function bindEnvMapControls() {
   const read = (id) => document.getElementById(id);
-  const params = { env: "san_giuseppe_bridge", mirror: false, autoRotate: false, showNormals: false };
+  const params = { env: "san_giuseppe_bridge", roughness: 0.5, autoRotate: false, showNormals: false };
   const env = read("env-select");
   env.addEventListener("change", () => { params.env = env.value; });
-  for (const [id, key] of [["env-mirror", "mirror"], ["env-rotate", "autoRotate"], ["env-normals", "showNormals"]]) {
+  const roughness = read("env-roughness");
+  const roughnessOut = read("env-roughness-out");
+  const syncRoughness = () => {
+    params.roughness = Number(roughness.value);
+    roughnessOut.textContent = params.roughness.toFixed(2);
+  };
+  roughness.addEventListener("input", syncRoughness);
+  syncRoughness();
+  for (const [id, key] of [["env-rotate", "autoRotate"], ["env-normals", "showNormals"]]) {
     const input = read(id);
     input.addEventListener("change", () => { params[key] = input.checked; });
   }
@@ -254,8 +263,8 @@ async function main() {
   const envLoading = {};
   function requestEnv(name) {
     if (!envLoading[name]) {
-      envLoading[name] = loadHdrTexture(gl, `${ENV_DIR}${ENVIRONMENTS[name].file}`)
-        .then((texture) => { envTextures[name] = texture; })
+      envLoading[name] = loadEnvironment(gl, `${ENV_DIR}${ENVIRONMENTS[name].file}`)
+        .then((environment) => { envTextures[name] = environment; })
         .catch((error) => console.error(error));
     }
     return envLoading[name];
@@ -405,7 +414,7 @@ async function main() {
 
     requestEnv(p.env);
     // Keep showing the previous environment until the new one has loaded.
-    const texture = envTextures[p.env] ?? Object.values(envTextures)[0];
+    const environment = envTextures[p.env] ?? Object.values(envTextures)[0];
     const exposure = envTextures[p.env] ? ENVIRONMENTS[p.env].exposure : 1.0;
 
     render(
@@ -415,17 +424,21 @@ async function main() {
       {
         u_resolution: { type: "2f", value: [gl.canvas.width, gl.canvas.height] },
         u_normalMap: { type: "1i", value: 0 },
-        u_mask: { type: "1i", value: 1 },
+        u_objects: { type: "1i", value: 1 },
         u_env: { type: "1i", value: 2 },
+        u_irradiance: { type: "1i", value: 3 },
+        u_envWidth: { type: "1f", value: environment.width },
+        u_envMaxLod: { type: "1f", value: environment.maxLod },
         u_envRotation: { type: "mat3", value: envRotationMatrix(envCurrent.yaw, envCurrent.pitch) },
         u_exposure: { type: "1f", value: exposure },
-        u_material: { type: "1i", value: p.mirror ? 1 : 0 },
+        u_roughness: { type: "1f", value: p.roughness },
         u_showNormals: { type: "1i", value: p.showNormals ? 1 : 0 },
       },
       [
         { handle: normalMapTextures.normal },
-        { handle: normalMapTextures.mask },
-        { handle: texture },
+        { handle: normalMapTextures.objects },
+        { handle: environment.radiance },
+        { handle: environment.irradiance },
       ],
     );
   }
