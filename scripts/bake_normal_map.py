@@ -1,22 +1,19 @@
-"""Bake the inputs of the normal-map mode from the path tracer's scene.
+"""Bake the normal map for the environment-map renderer.
 
-The normal-map renderer has no geometry. Everything it knows about the scene
-comes from the images written here, all viewed from the path tracer's default
-camera (mouse centered, no WASD/scroll offset):
+The renderer has no geometry. Everything it knows about the spheres comes from
+the images written here, seen from one fixed camera (camera() below; its pitch
+and focal length are repeated in src/shader/env_map.frag):
 
-  normal.png       front-most surface normal (bubbles included), view space
-  normal_back.png  normal of the surface seen *through* the bubbles
-  albedo.png       sRGB albedo of that background surface
-  mask.png         bubble coverage (anti-aliased)
-  objects.png      per-sphere coverage: R, G, B = SPHERES[0], [1], [2]
+  normal.png   front-most surface normal, view space
+  objects.png  per-sphere coverage: R, G, B = SPHERES[0], [1], [2]
 
 Normals use the common OpenGL tangent/view convention: +X right, +Y up,
 +Z toward the viewer, encoded as rgb = n * 0.5 + 0.5. A surface facing the
 camera is therefore (128, 128, 255).
 
-Soap films have air on both sides (IOR 1 -> 1), so a transmitted ray leaves a
-bubble undeflected. Tracing the scene without the spheres gives exactly what is
-visible through them.
+The room around the spheres comes from an earlier path-traced version of the
+scene. It only fills normal.png outside the spheres, which the renderer covers
+with the panorama.
 
 Usage: python3 scripts/bake_normal_map.py [size]
 """
@@ -31,7 +28,6 @@ SIZE = int(sys.argv[1]) if len(sys.argv) > 1 else 1024
 SUPERSAMPLE = 3  # per axis
 OUT_DIR = Path(__file__).resolve().parent.parent / "public" / "normalmap"
 
-# Must match intersectScene() in src/shader/path_trace.frag.
 SPHERES = [
     ((-0.95, 1.10, 0.0), 0.95),
     ((0.9, 0.85, 0.25), 0.66),
@@ -60,7 +56,7 @@ def normalize(v):
 
 
 def camera():
-    """makeCameraRay() with u_mouse = (0.5, 0.5) and zero offsets."""
+    """Fixed camera: looks at the spheres from slightly above."""
     yaw = 0.0
     pitch = 0.5 * (0.1 + 0.38)
     target = np.array([0.0, 0.85, -0.2])
@@ -80,7 +76,7 @@ def trace(origin, dirs, include_spheres):
     t_best = np.full(n, np.inf)
     normal = np.zeros((n, 3))
     albedo = np.zeros((n, 3))
-    is_bubble = np.zeros(n, dtype=bool)
+    is_sphere = np.zeros(n, dtype=bool)
     sphere_id = np.full(n, -1)
 
     for point, pn, bmin, bmax, au, av, alb in PLANES:
@@ -95,7 +91,7 @@ def trace(origin, dirs, include_spheres):
         t_best[ok] = t[ok]
         normal[ok] = np.where(denom[ok, None] < 0, pn, -pn)
         albedo[ok] = alb
-        is_bubble[ok] = False
+        is_sphere[ok] = False
         sphere_id[ok] = -1
 
     if include_spheres:
@@ -108,10 +104,10 @@ def trace(origin, dirs, include_spheres):
             t_best[ok] = t[ok]
             normal[ok] = normalize(origin + t[ok, None] * dirs[ok] - center)
             albedo[ok] = 0.0
-            is_bubble[ok] = True
+            is_sphere[ok] = True
             sphere_id[ok] = index
 
-    return normal, albedo, is_bubble, sphere_id
+    return normal, albedo, is_sphere, sphere_id
 
 
 def to_view(normal_world, r, u, f):
@@ -138,25 +134,17 @@ def main():
     sx, sy = np.meshgrid(xs, ys)
     dirs = normalize(sx[..., None] * r + sy[..., None] * u + 1.55 * f).reshape(-1, 3)
 
-    front_n, _, bubble, sphere_id = trace(cam_pos, dirs, include_spheres=True)
-    back_n, back_albedo, _, _ = trace(cam_pos, dirs, include_spheres=False)
+    front_n, _, _, sphere_id = trace(cam_pos, dirs, include_spheres=True)
 
     def downsample(a):
         a = a.reshape(SIZE, SUPERSAMPLE, SIZE, SUPERSAMPLE, -1)
         return a.mean(axis=(1, 3))
 
     front_view = downsample(to_view(front_n, r, u, f))
-    back_view = downsample(to_view(back_n, r, u, f))
-    albedo = downsample(back_albedo)
-    mask = downsample(bubble.astype(float)[:, None])[..., 0]
     objects = downsample(np.stack([sphere_id == i for i in range(3)], axis=-1).astype(float))
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     Image.fromarray(encode_normal(front_view), "RGB").save(OUT_DIR / "normal.png")
-    Image.fromarray(encode_normal(back_view), "RGB").save(OUT_DIR / "normal_back.png")
-    albedo8 = np.round(linear_to_srgb(albedo) * 255.0).astype(np.uint8)
-    Image.fromarray(albedo8, "RGB").save(OUT_DIR / "albedo.png")
-    Image.fromarray(np.round(mask * 255.0).astype(np.uint8), "L").save(OUT_DIR / "mask.png")
     Image.fromarray(np.round(objects * 255.0).astype(np.uint8), "RGB").save(OUT_DIR / "objects.png")
     print(f"wrote {SIZE}x{SIZE} maps to {OUT_DIR}")
 

@@ -39,12 +39,15 @@ const float PI = 3.14159265359;
 const vec3 PLASTIC_ALBEDO = vec3(0.82, 0.80, 0.78);
 const vec3 SILVER_F0 = vec3(0.97, 0.96, 0.92);
 const vec3 GOLD_F0 = vec3(1.00, 0.78, 0.34);
+// Enough blur for the strong curvature near silhouettes without letting the
+// background/sphere discontinuity pick a near-1x1 mip.
+const float SPHERE_MAX_GRAD_LOD = 4.0;
 
 // ---------------------------------------------------------------------------
-// Camera: must match makeCameraRay() in path_trace.frag with the mouse
-// centered, since that is how the normal map was baked.
+// Camera: must match camera() in scripts/bake_normal_map.py, since that is
+// how the normal map was baked.
 
-const float CAMERA_PITCH = 0.24;   // mix(0.1, 0.38, 0.5)
+const float CAMERA_PITCH = 0.24;
 const float FOCAL = 1.55;
 
 mat3 viewToWorld() {
@@ -82,12 +85,16 @@ vec2 directionToEquirect(vec3 d) {
 }
 
 // Radiance along a world direction, blurred to at least minLod.
+// maxGradLod caps the derivative-based level: on a sphere's silhouette a 2x2
+// pixel quad straddles the sphere and the background, the reflection direction
+// jumps, and the huge derivative would pick a nearly 1x1 mip (a dark average)
+// and draw a dotted outline.
 //
 // u wraps from 1 back to 0 behind the viewer. Implicit derivatives see that
 // jump as a huge gradient and pick the smallest mip, drawing a seam line. Take
 // derivatives of a second parameterization whose wrap is on the opposite side,
 // keep whichever is smaller, and pick the mip level from those.
-vec3 sampleEnv(vec3 dirWorld, float minLod) {
+vec3 sampleEnv(vec3 dirWorld, float minLod, float maxGradLod) {
   vec3 d = u_envRotation * dirWorld;
   vec2 uvA = directionToEquirect(d);
   vec2 uvB = vec2(fract(uvA.x + 0.5) - 0.5, uvA.y);
@@ -97,7 +104,7 @@ vec3 sampleEnv(vec3 dirWorld, float minLod) {
   vec2 dy = vec2(abs(dyA.x) < abs(dyB.x) ? dyA.x : dyB.x, dyA.y);
   vec2 texels = vec2(u_envWidth, u_envWidth * 0.5);
   float footprint = max(dot(dx * texels, dx * texels), dot(dy * texels, dy * texels));
-  float lod = max(0.5 * log2(max(footprint, 1e-8)), minLod);
+  float lod = max(min(0.5 * log2(max(footprint, 1e-8)), maxGradLod), minLod);
   return textureLod(u_env, uvA, lod).rgb;
 }
 
@@ -123,7 +130,7 @@ vec3 polishedMetal(vec3 f0, float cosV, vec3 reflection) {
 vec3 roughPlastic(vec3 normalWorld, vec3 reflectWorld, float cosV) {
   float roughness = clamp(u_roughness, 0.0, 1.0);
   float lod = roughness * (u_envMaxLod - 1.0);
-  vec3 glossy = sampleEnv(reflectWorld, lod);
+  vec3 glossy = sampleEnv(reflectWorld, lod, SPHERE_MAX_GRAD_LOD);
   vec3 f0 = vec3(mix(0.3, 0.02, roughness));
   vec3 fresnel = f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(1.0 - cosV, 5.0);
   vec3 diffuse = PLASTIC_ALBEDO * sampleIrradiance(normalWorld);
@@ -157,8 +164,8 @@ void main() {
 
   // Every lookup runs for every pixel: the mip selection needs derivatives,
   // which are only defined in uniform control flow.
-  vec3 background = sampleEnv(dWorld, 0.0);
-  vec3 mirror = sampleEnv(rWorld, 0.0);
+  vec3 background = sampleEnv(dWorld, 0.0, u_envMaxLod);
+  vec3 mirror = sampleEnv(rWorld, 0.0, SPHERE_MAX_GRAD_LOD);
   vec3 plastic = roughPlastic(nWorld, rWorld, cosV);
 
   vec3 silver = polishedMetal(SILVER_F0, cosV, mirror);

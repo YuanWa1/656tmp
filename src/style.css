@@ -420,86 +420,59 @@ input[type="range"]::-moz-range-thumb {
 }
 
 
-/* Renderer switch and normal-map controls */
-.mode-switch {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 18px;
-  border-radius: 999px;
-  background: rgba(15, 34, 51, 0.08);
-  border: 1px solid var(--panel-border);
+/* Environment-map viewer: canvas with the controls beside it */
+.stage__frame {
+  display: grid;
+  grid-template-columns: auto 300px;
+  justify-content: center;
+  place-items: start stretch;
+  gap: 28px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
 }
 
-.mode-switch__option input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.mode-switch__option span {
+.stage__frame canvas {
   display: block;
-  padding: 8px 18px;
-  border-radius: 999px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--muted);
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
+  /* As large as fits beside the 300px panel and within the viewport height. */
+  width: min(calc(100vw - 400px), calc(100vh - 64px), 980px);
+  max-width: none;
 }
 
-.mode-switch__option input:checked + span {
-  background: var(--text);
-  color: var(--panel);
+.env-controls {
+  position: sticky;
+  top: 24px;
 }
 
-.mode-switch__option input:focus-visible + span {
-  outline: 2px solid var(--accent-2);
-  outline-offset: 2px;
+.env-controls h2 {
+  margin: 0;
+  font-size: 1.1rem;
 }
 
-.hint {
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  text-align: center;
-}
-
-.nm-controls {
-  width: min(64vw, 640px);
-  margin-top: 18px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px 24px;
-}
-
-.nm-controls .control {
-  min-width: 0;
-}
-
-.nm-controls select {
-  width: 100%;
-  min-width: 0;
-  font: inherit;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--panel-border);
-  background: #fff;
-  color: var(--text);
-}
-
-.nm-controls output {
+.env-controls output {
   float: right;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   font-weight: 400;
 }
 
-[data-mode][hidden] {
-  display: none !important;
-}
+@media (max-width: 900px) {
+  .stage__frame {
+    grid-template-columns: 1fr;
+  }
 
-@media (max-width: 960px) {
-  .nm-controls {
-    width: min(82vw, 640px);
+  .stage__frame canvas {
+    width: 100%;
+  }
+
+  .stage__frame {
+    justify-content: stretch;
+  }
+
+  .env-controls {
+    position: static;
   }
 }
